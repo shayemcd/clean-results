@@ -33,6 +33,12 @@
 #' @param auto_note Include the automatic methods note.
 #' @param effect_size Add a Cohen's *d* column for linear models (factor levels and
 #'   contrasts).
+#' @param omit Regular expression matched against model term labels (the
+#'   `variable` column of [cr_tidy()], e.g. `"Topic"`, `"Month"`,
+#'   `"age:condition"`): matching rows are left out of the table, typically
+#'   nuisance controls. They stay in the fitted models and in [cr_tidy()],
+#'   [cr_report()], and [cr_ground_truth()]. With `auto_note = TRUE` the note
+#'   lists them ("Also controls for: ...").
 #' @return An object of class `cr_table`.
 #' @export
 #' @examples
@@ -44,15 +50,20 @@
 #' cr_table(res, style = "stargazer")              # stacked SEs with stars
 #' cr_table(res, contrasts = "exclude")            # main table without contrasts
 #' cr_contrast_table(res)                          # contrasts in their own table
+#' cr_table(res, omit = "^(region|wave)$")         # hide nuisance controls
 #' }
 cr_table <- function(x, style = "apa", uncertainty = NULL, p = NULL, layout = NULL,
                      contrasts = c("include", "exclude", "only"), digits = 2, p_digits = 3,
                      fit = TRUE, random = TRUE, show_model_type = TRUE, note = NULL,
-                     auto_note = TRUE, effect_size = FALSE) {
+                     auto_note = TRUE, effect_size = FALSE, omit = NULL) {
   stopifnot(inherits(x, "clean_results"))
   contrasts <- match.arg(contrasts)
   spec <- table_spec(style, uncertainty, p, layout, contrasts, effect_size)
-  g <- build_grid(x, spec = spec, digits = digits, p_digits = p_digits,
+  shown <- omit_rows(x, omit)
+  if (auto_note && length(shown$omitted)) {
+    note <- c(sprintf("Also controls for: %s.", paste(shown$omitted, collapse = ", ")), note)
+  }
+  g <- build_grid(shown$x, spec = spec, digits = digits, p_digits = p_digits,
                   fit = fit, random = random, show_model_type = show_model_type,
                   note = note)
   if (!auto_note) g$notes <- note
@@ -70,6 +81,26 @@ cr_table <- function(x, style = "apa", uncertainty = NULL, p = NULL, layout = NU
 #' @export
 cr_contrast_table <- function(x, ...) {
   cr_table(x, contrasts = "only", ...)
+}
+
+# Drops the rows of `omit`-matched variables; returns the trimmed results and the
+# display labels of what was dropped (for the note).
+omit_rows <- function(x, omit = NULL) {
+  if (is.null(omit) || !nzchar(omit)) return(list(x = x, omitted = character()))
+  e <- x$estimates
+  drop <- !is.na(e$variable) & grepl(omit, e$variable, perl = TRUE)
+  if (!any(drop)) {
+    warning(sprintf("`omit` = '%s' matched no table rows.", omit), call. = FALSE)
+    return(list(x = x, omitted = character()))
+  }
+  vars <- unique(e$variable[drop])
+  labs <- vapply(vars, function(v) {
+    r <- e[drop & e$variable == v, , drop = FALSE]
+    h <- r$label[r$row_type == "header"]
+    if (length(h)) h[1] else r$label[1]
+  }, "")
+  x$estimates <- e[!drop, , drop = FALSE]
+  list(x = x, omitted = unname(labs))
 }
 
 as_cr_table <- function(x) {
