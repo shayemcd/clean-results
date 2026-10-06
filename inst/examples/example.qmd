@@ -1,0 +1,51 @@
+---
+title: "cleanresults in a Quarto manuscript"
+format:
+  html: default
+  docx: default
+  pdf: default
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(cleanresults)
+d <- read.csv("study1.csv")
+d$condition <- factor(d$condition, levels = c("Control", "Gain", "Loss"))
+
+res <- clean_regress(
+  d,
+  dvs = c(trust = "linear", donated = "logistic", shared = "logistic"),
+  predictors = ~ condition + age,
+  random = ~ (1 | id),
+  contrasts = "condition",       # pairwise contrasts, Holm-adjusted within factor
+  dv_adjust = "holm",            # plus a correction across the 3 outcomes
+  dv_adjust_terms = "condition",
+  labels = c(condition = "Condition", age = "Age (years)"),
+  dv_labels = c(trust = "Trust", donated = "Donated", shared = "Shared")
+)
+```
+
+Loss framing increased sharing relative to control,
+`r cr_inline(res, "shared", "condition", "Loss")` (@tbl-main).
+
+```{r}
+#| label: tbl-main
+#| tbl-cap: "Effects of framing on trust, donation, and sharing"
+cr_table(res)
+```
+
+```{r}
+#| label: tbl-stargazer
+#| tbl-cap: "The same models, stargazer style"
+cr_table(res, style = "se", fit = FALSE)
+```
+
+```{r}
+#| label: export
+#| include: false
+# Files for Overleaf, Word, and Google Docs
+cr_save(res, "tables/table1.tex", caption = "Effects of framing", label = "tab:main")
+cr_save(res, "tables/table1.docx")
+cr_save(res, "tables/table1.html")
+```

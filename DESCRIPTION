@@ -1,0 +1,31 @@
+Package: cleanresults
+Title: Publication-Ready Regression Tables for Multiple Outcomes
+Version: 0.1.0
+Authors@R: person("Shaye", email = "shaye.mcd@gmail.com", role = c("aut", "cre"))
+Description: Fits linear, logistic, and mixed-effects regressions for one or
+    more dependent variables and renders a single publication-ready table with
+    robust standard errors, explicit reference categories, pairwise contrasts,
+    and multiple-comparison corrections within factors and across outcomes.
+    Tables render natively in Quarto (HTML, Word, PDF) and export to Word,
+    LaTeX (Overleaf), and HTML that pastes cleanly into Google Docs.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Depends: R (>= 4.1)
+Imports:
+    stats,
+    utils,
+    sandwich,
+    clubSandwich,
+    emmeans,
+    flextable,
+    officer,
+    tools,
+    knitr
+Suggests:
+    lme4,
+    lmerTest,
+    testthat (>= 3.0.0),
+    rmarkdown
+Config/testthat/edition: 3
