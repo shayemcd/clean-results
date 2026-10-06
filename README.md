@@ -109,20 +109,85 @@ To save a specific layout, pass a `cr_table`:
 `cr_save(cr_table(res, style = "stargazer"), "table1.tex")` or
 `cr_save(cr_contrast_table(res), "table2.docx")`.
 
-## Numbers in text
+## Results text that updates itself
+
+Everything below comes from the same objects as the tables, so prose rebuilt
+on render can't drift from the numbers.
+
+### Numbers, words, and sentences
 
 ```r
 cr_inline(res, "trust", "condition", "Gain")
-#> "*b* = 0.46, 95% CI [0.04, 0.89], *p* = .065"
+#> "*b* = 0.46, 95% CI [0.04, 0.89], *p* = .032"
+cr_inline(res, "trust", "condition", "Gain", style = "econ")
+#> "b = 0.46 (SE = 0.21, p = 0.032)"
+cr_inline(res, "trust", "condition", "Gain", stats = c("est", "ci", "p", "es"))  # adds d
 
-cr_inline(res, "shared", "condition", "Loss vs. Gain",
-          stats = c("est", "ci", "test", "p"), format = "plain")
-#> "OR = 2.82, 95% CI [1.39, 5.72], z = 3.50, p = .004"
+cr_direction(res, "trust", "condition", "Gain")       # "higher" / "lower"
+cr_sig(res, "trust", "condition", "Gain")             # "was" / "was not"
+cr_sentence(res, "trust", "condition", "Gain")
+#> "Compared with Control, Gain was associated with higher trust, *b* = 0.46, ..."
 ```
 
-In a qmd, write `` `r cr_inline(res, "trust", "age")` ``. Use
-`format = "latex"` for Overleaf and `"plain"` for Google Docs. Because these
-strings come from the same object as the table, the text can't drift from it.
+In a qmd: `` Gain framing `r cr_direction(res, "trust", "condition", "Gain", words = c("raised", "lowered"))` trust, `r cr_inline(res, "trust", "condition", "Gain")`. ``
+Use `format = "latex"` for Overleaf and `"plain"` or `"html"` for Google Docs.
+
+Sentences are mechanical by design. They give the direction, whether the
+result was significant (non-significant results get "did not differ
+significantly" wording), and the statistics, never interpretation.
+
+### Hypothesis map and results paragraphs
+
+```r
+hyp <- cr_hypotheses(
+  H1 = cr_h(res, "trust", "condition", "Gain", expect = "+",
+            robustness = list("excluding speeders" = res_strict,
+                              "t-test" = cr_h(tt, "trust", "condition", "Gain vs. Control"))),
+  H2 = list(cr_h(res, "shared", "condition", "Loss", expect = "+"),
+            cr_h(res, "shared", "condition", "Loss vs. Gain", expect = "+")),
+  labels = c(H1 = "Gain framing increases trust", H2 = "Loss framing increases sharing")
+)
+hyp                      # each test, its robustness checks, expectation met or not
+cr_report(hyp)           # one paragraph per hypothesis, robustness checks attached
+cr_report(res)           # or every estimate in a results object
+cr_save(cr_report(hyp), "results/h_results.tex")   # \input{} in Overleaf
+cr_save(cr_report(hyp), "results/h_results.html")  # paste into Google Docs with italics
+```
+
+### Guarding against drift
+
+| Risk | Tool |
+|---|---|
+| A hand-written claim ("framing increased sharing") stops being true after a re-run | `cr_expect(res, "shared", "condition", "Loss", sign = "+", sig = TRUE)` in a hidden chunk makes the render **fail**; `cr_expect(hyp)` checks every hypothesis with an `expect` |
+| A number typed by hand doesn't match the results | `cr_verify("paper.qmd", res)` checks every typed number (inline R output is skipped because it's correct by construction). Also works on a `.docx` downloaded from Google Docs. `strict = TRUE` fails the render |
+| You changed code or data and don't know which sentences to re-read | `cr_ground_truth(res, hyp, path = "results/ground_truth.json")` on every render prints what changed since last time, flagging **sign flips** and **significance changes**. `cr_diff(old, new)` does the same on demand |
+| An LLM drafts or checks the prose | Give it `cr_ground_truth(..., path = "ground_truth.md")`: every estimate, its exact reported string, models, and the hypothesis map |
+
+`cr_verify()` can tell a number exists in the results, not that the sentence
+attaches it to the right comparison. That reading check is the LLM's (or a
+co-author's) job, working from the ground-truth export.
+
+## Simple tests and Cohen's d
+
+```r
+cr_d(d, "trust", "condition")                         # every pair of conditions
+cr_d(d, "trust", "condition", pairs = "ref", ref = "Control")
+cr_d(d, "trust", "condition", pairs = c("Loss vs. Gain", "Loss vs. Control"))
+cr_d(d, c("trust", "liking"), "condition", by = "study", effect = "g")
+cr_ttest(d, "trust", "time", id = "pid")              # paired, d_z
+cr_d(res)                                             # model-based d for every contrast
+cr_table(res, effect_size = TRUE)                     # d column in the table
+
+cr_chisq(d, "shared", "condition", pairs = "all")     # chi-square/Fisher, V, pairwise h
+cr_anova(d, "trust", "condition")                     # F, eta squared
+cr_cor(d, c("trust", "liking", "age"))                # every pair
+```
+
+All of these work with `cr_inline()`, `cr_sentence()`, `cr_report()`,
+`cr_h()`, `cr_ground_truth()`, and `cr_verify()`. Pairwise *p*-values are
+Holm-adjusted across pairs by default (`adjust`); `dv_adjust` corrects across
+outcomes. Model-based *d* divides by the residual SD (lm) or the total SD
+(residual + random-intercept variance) for mixed models.
 
 ## Methods defaults
 

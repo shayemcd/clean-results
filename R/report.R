@@ -181,11 +181,19 @@ report_text <- function(x, dv, variables, contrasts, intercept, status, stats, f
       r <- r[r$variable %in% variables | r$variable_label %in% variables, , drop = FALSE]
     }
     if (r$kind[1] %in% "regression") {
-      if (!contrasts) r <- r[r$section != "contrast", , drop = FALSE]
+      if (!contrasts) {
+        r <- r[r$section != "contrast", , drop = FALSE]
+      } else {
+        # contrasts already include each level vs. the reference; don't say it twice
+        has_ctr <- unique(paste(r$dv, r$variable)[r$section == "contrast"])
+        r <- r[!(r$section == "fixed" & !is.na(r$level) & paste(r$dv, r$variable) %in% has_ctr), ,
+               drop = FALSE]
+      }
       if (!intercept) r <- r[r$variable != "(Intercept)", , drop = FALSE]
     }
     if (!nrow(r)) stop("Nothing to report after filtering.", call. = FALSE)
-    vapply(split(seq_len(nrow(r)), factor(r$dv, unique(r$dv))), function(ix) {
+    para <- if (all(r$kind == "cor")) rep("all", nrow(r)) else r$dv
+    vapply(split(seq_len(nrow(r)), factor(para, unique(para))), function(ix) {
       paste(vapply(ix, function(i) sent(r[i, ]), ""), collapse = " ")
     }, "")
   }

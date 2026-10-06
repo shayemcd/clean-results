@@ -7,8 +7,9 @@
 cr_save(x, path, caption = NULL, label = NULL, landscape = FALSE, ...)
 }
 \arguments{
-\item{x}{A \code{clean_results} or \code{cr_table} object. Pass a \code{cr_table} to control
-the style, e.g. \code{cr_save(cr_table(res, style = "se"), "t2.tex")}.}
+\item{x}{A \code{clean_results}, \code{cr_table}, \code{cr_text}, or \code{cr_ground_truth}
+object. Pass a \code{cr_table} to control the table style, e.g.
+\code{cr_save(cr_table(res, style = "se"), "t2.tex")}.}
 
 \item{path}{Output file path.}
 
@@ -33,4 +34,10 @@ to Drive and open it with Google Docs, or copy the table from Word).
 paste into Google Docs or an email.
 \item \code{.csv}: the formatted cells, for anything else.
 }
+}
+\details{
+Report text from \code{\link[=cr_report]{cr_report()}} saves to \code{.tex} (for \verb{\\input\{\}} in
+Overleaf), \code{.md}, \code{.html} (open in a browser and paste into Google Docs to
+keep italics), or \code{.txt}. A \code{\link[=cr_ground_truth]{cr_ground_truth()}} saves to \code{.json}, \code{.md}, or
+\code{.csv}.
 }

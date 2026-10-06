@@ -111,18 +111,22 @@ cr_rows.clean_results <- function(x, ...) {
 cr_find <- function(x, dv, variable = NULL, level = NULL, subgroup = NULL) {
   r <- cr_rows(x)
   where <- function(msg) sprintf("%s. Run cr_rows() on the source to see what is available.", msg)
-  m <- r[r$dv %in% dv | r$dv_label %in% dv, , drop = FALSE]
-  if (!nrow(m) && !is.null(variable)) {
-    # correlations: dv/variable may be given in either order
-    m <- r[(r$variable %in% dv | r$variable_label %in% dv) &
-             (r$dv %in% variable | r$dv_label %in% variable), , drop = FALSE]
-    if (nrow(m)) variable <- NULL
+  is_dv <- function(v) r$dv %in% v | r$dv_label %in% v
+  is_var <- function(v) r$variable %in% v | r$variable_label %in% v
+  m <- r[is_dv(dv), , drop = FALSE]
+  if (!nrow(m) && !any(is_var(dv))) {
+    stop(where(sprintf("Outcome '%s' not found", dv)), call. = FALSE)
   }
-  if (!nrow(m)) stop(where(sprintf("Outcome '%s' not found", dv)), call. = FALSE)
   if (!is.null(subgroup)) m <- m[m$subgroup %in% subgroup, , drop = FALSE]
   if (!is.null(variable)) {
-    m <- m[m$variable %in% variable | m$variable_label %in% variable |
-             (is.na(m$level) & m$id %in% paste(m$dv, variable, sep = "::")), , drop = FALSE]
+    hit <- m$variable %in% variable | m$variable_label %in% variable |
+      (is.na(m$level) & m$id %in% paste(m$dv, variable, sep = "::"))
+    m <- m[hit, , drop = FALSE]
+    if (!nrow(m)) {
+      # correlations are symmetric: accept the two variables in either order
+      m <- r[is_var(dv) & is_dv(variable) & r$kind == "cor", , drop = FALSE]
+      if (!is.null(subgroup)) m <- m[m$subgroup %in% subgroup, , drop = FALSE]
+    }
     if (!nrow(m)) stop(where(sprintf("'%s' not found for outcome '%s'", variable, dv)),
                        call. = FALSE)
   }

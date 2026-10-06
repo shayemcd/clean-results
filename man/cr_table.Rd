@@ -17,7 +17,8 @@ cr_table(
   random = TRUE,
   show_model_type = TRUE,
   note = NULL,
-  auto_note = TRUE
+  auto_note = TRUE,
+  effect_size = FALSE
 )
 }
 \arguments{
@@ -51,6 +52,9 @@ below the estimate), or \code{"inline"} (one cell: \code{0.46 (0.21)} or
 \item{note}{Extra note lines appended under the automatic note.}
 
 \item{auto_note}{Include the automatic methods note.}
+
+\item{effect_size}{Add a Cohen's \emph{d} column for linear models (factor levels and
+contrasts).}
 }
 \value{
 An object of class \code{cr_table}.

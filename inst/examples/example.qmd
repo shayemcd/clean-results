@@ -24,10 +24,23 @@ res <- clean_regress(
   labels = c(condition = "Condition", age = "Age (years)"),
   dv_labels = c(trust = "Trust", donated = "Donated", shared = "Shared")
 )
+
+hyp <- cr_hypotheses(
+  H1 = cr_h(res, "trust", "condition", "Gain", expect = "+"),
+  H2 = cr_h(res, "shared", "condition", "Loss", expect = "+"),
+  labels = c(H1 = "Gain framing increases trust", H2 = "Loss framing increases sharing")
+)
+cr_expect(hyp)   # rendering stops if a hypothesis result no longer matches its claim
+cr_ground_truth(res, hyp, path = "results/ground_truth.json")  # reports what changed
 ```
 
-Loss framing increased sharing relative to control,
-`r cr_inline(res, "shared", "condition", "Loss")` (@tbl-main).
+Loss framing `r cr_direction(res, "shared", "condition", "Loss", words = c("increased", "decreased"))`
+sharing relative to control, `r cr_inline(res, "shared", "condition", "Loss")` (@tbl-main).
+
+```{r}
+#| echo: false
+cr_report(hyp)
+```
 
 ```{r}
 #| label: tbl-main
