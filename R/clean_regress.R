@@ -116,6 +116,9 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     ctr <- pairwise_rows(m, mtype, d_i, cvars, V, se, contrast_adjust, conf_level,
                          exp_i, lab_fun)
     est <- rbind(fixed[, names(ctr %||% fixed)], ctr)
+    est$log_scale <- exp_i
+    est$ci_level <- ci_levels(est, conf_level)
+    est <- add_std_diff(est, m, mtype)
     est$dv <- dv
     est$p.within <- est$p.value
     est_list[[dv]] <- est
@@ -195,6 +198,118 @@ adjust_across_dvs <- function(est, method, terms, n_dv) {
     est$p.value[idx] <- stats::p.adjust(est$p.within[idx], method = method)
   }
   est$dv_adjusted <- eligible
+  # widen the CIs of adjusted rows to match: Bonferroni across the outcomes in
+  # each family, on top of any within-factor adjustment already in the CI
+  for (g in unique(grp[eligible])) {
+    idx <- which(grp == g & eligible)
+    if (length(idx) < 2) next
+    new_level <- 1 - (1 - est$ci_level[idx]) / length(idx)
+    est[idx, ] <- rescale_ci(est[idx, , drop = FALSE], new_level)
+  }
+  est
+}
+
+# The confidence level each row's CI actually has. Coefficient rows use
+# `conf_level`; contrast CIs come from emmeans already adjusted within the
+# factor (Bonferroni for Holm, Tukey's studentized range for Tukey), so their
+# per-comparison level is read back from the interval itself.
+ci_levels <- function(est, conf_level) {
+  lev <- rep(conf_level, nrow(est))
+  ctr <- which(est$section == "contrast" & est$row_type == "level")
+  if (length(ctr)) {
+    q <- ci_q(est[ctr, , drop = FALSE])
+    df <- ifelse(is.finite(est$df[ctr]), est$df[ctr], Inf)
+    lev[ctr] <- ifelse(is.na(q), conf_level, 2 * stats::pt(q, df) - 1)
+  }
+  lev
+}
+
+# Critical value implied by a row's CI: half-width / SE, on the log scale for
+# odds ratios (where std.error is the delta-method SE of the ratio).
+ci_q <- function(r) {
+  log_scale <- r$log_scale %in% TRUE
+  ifelse(log_scale,
+         log(r$conf.high / r$estimate) / (r$std.error / r$estimate),
+         (r$conf.high - r$estimate) / r$std.error)
+}
+
+rescale_ci <- function(r, new_level) {
+  q_old <- ci_q(r)
+  df <- ifelse(is.finite(r$df), r$df, Inf)
+  q_new <- stats::qt(1 - (1 - new_level) / 2, df)
+  k <- q_new / q_old
+  ok <- is.finite(k)
+  log_scale <- r$log_scale %in% TRUE
+  lo <- ifelse(log_scale, r$estimate * (r$conf.low / r$estimate)^k,
+               r$estimate - (r$estimate - r$conf.low) * k)
+  hi <- ifelse(log_scale, r$estimate * (r$conf.high / r$estimate)^k,
+               r$estimate + (r$conf.high - r$estimate) * k)
+  if ("es" %in% names(r)) {
+    has_es <- ok & !is.na(r$es) & r$estimate != 0
+    sd_ratio <- r$es / r$estimate
+    r$es.low[has_es] <- (lo * sd_ratio)[has_es]
+    r$es.high[has_es] <- (hi * sd_ratio)[has_es]
+  }
+  r$conf.low[ok] <- lo[ok]
+  r$conf.high[ok] <- hi[ok]
+  r$ci_level[ok] <- new_level[ok]
+  r
+}
+
+# Standardized mean differences (Cohen's d) for linear models.
+# lm: the difference divided by the pooled within-group SD of the raw outcome
+#   across that factor's levels, so covariates don't inflate d (the residual SD
+#   shrinks as covariates explain variance; Lakens, 2013).
+# lmer: divided by the total SD of one observation: sqrt(residual variance +
+#   the variance the random effects add, slopes included) (Westfall, Kenny, &
+#   Judd, 2014; Brysbaert & Stevens, 2018).
+std_sd <- function(model, type, variable = NULL) {
+  if (type == "lm") {
+    if (is.null(variable)) return(NA_real_)
+    mf <- stats::model.frame(model)
+    if (!variable %in% names(mf)) return(NA_real_)
+    y <- stats::model.response(mf)
+    g <- as.character(mf[[variable]])
+    ok <- !is.na(y) & !is.na(g)
+    y <- y[ok]; g <- g[ok]
+    n_g <- tapply(y, g, length)
+    v_g <- tapply(y, g, stats::var)
+    keep <- n_g > 1
+    return(sqrt(sum((n_g[keep] - 1) * v_g[keep]) / (sum(n_g[keep]) - sum(keep))))
+  }
+  if (type == "lmer") return(sqrt(stats::sigma(model)^2 + random_variance(model)))
+  NA_real_
+}
+
+# Average variance the random effects add to one observation: mean over rows
+# of z' Sigma z for each grouping term, so random slopes (and their
+# covariances) count in proportion to the predictor values in the data
+# (Johnson, 2014). With random intercepts only this is the sum of the
+# intercept variances.
+random_variance <- function(model) {
+  vc <- lme4::VarCorr(model)
+  mm <- lme4::getME(model, "mmList")
+  total <- 0
+  for (k in seq_along(vc)) {
+    Sigma <- as.matrix(vc[[k]])
+    Z <- as.matrix(mm[[k]])
+    Z <- Z[, colnames(Sigma), drop = FALSE]
+    total <- total + mean(rowSums((Z %*% Sigma) * Z))
+  }
+  total
+}
+
+add_std_diff <- function(est, model, type) {
+  est$es <- est$es.low <- est$es.high <- NA_real_
+  if (!type %in% c("lm", "lmer")) return(est)
+  ok <- which(est$row_type == "level" & !est$is_ref)
+  for (i in ok) {
+    sdv <- std_sd(model, type, est$variable[i])
+    if (is.na(sdv) || sdv <= 0) next
+    est$es[i] <- est$estimate[i] / sdv
+    est$es.low[i] <- est$conf.low[i] / sdv
+    est$es.high[i] <- est$conf.high[i] / sdv
+  }
   est
 }
 

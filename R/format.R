@@ -39,7 +39,7 @@ adjust_name <- function(m) {
 
 # Resolve a style preset plus any explicit overrides into one display spec.
 table_spec <- function(style = "apa", uncertainty = NULL, p = NULL, layout = NULL,
-                       contrasts = "include") {
+                       contrasts = "include", effect_size = FALSE) {
   style <- match.arg(style, c("apa", "stargazer", "compact", "ci", "se"))
   preset <- switch(style,
     apa = , ci = list(uncertainty = "ci", p = "value", layout = "columns"),
@@ -55,7 +55,9 @@ table_spec <- function(style = "apa", uncertainty = NULL, p = NULL, layout = NUL
   spec$stars <- spec$p %in% c("stars", "both")
   spec$p_col <- spec$p %in% c("value", "both")
   spec$unc_col <- spec$layout == "columns" && spec$uncertainty != "none"
-  spec$cols <- c("est", if (spec$unc_col) "unc", if (spec$p_col) "p")
+  spec$effect_size <- isTRUE(effect_size)
+  spec$cols <- c("est", if (spec$unc_col) "unc", if (spec$effect_size) "es",
+                 if (spec$p_col) "p")
   spec
 }
 
@@ -101,6 +103,7 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
         if (spec$layout == "inline" && spec$uncertainty != "none") e <- paste(e, unc_txt(r))
         vals <- c(est = e,
                   unc = if (spec$unc_col) unc_txt(r),
+                  es = if (spec$effect_size) fmt_num(r$es, digits),
                   p = if (spec$p_col) fmt_p(r$p.value, p_digits))
         cells[b] <- vals[spec$cols]
         if (spec$layout == "stacked") below[b[1]] <- unc_txt(r)
@@ -145,7 +148,7 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
     if (spec$layout == "inline" && spec$uncertainty != "none") {
       e <- paste(e, if (spec$uncertainty == "se") "(SE)" else sprintf("[%s]", ci_lab))
     }
-    c(est = e, unc = unc_lab, p = "p")[spec$cols]
+    c(est = e, unc = unc_lab, es = "d", p = "p")[spec$cols]
   }), use.names = FALSE)
   mtype <- vapply(dvs, function(d) .type_labels[[x$meta[[d]]$type]], "")
 
@@ -210,8 +213,13 @@ table_notes <- function(x, spec, note = NULL) {
   }
   if (show_contrasts) {
     adj <- x$settings$contrast_adjust
-    adj_txt <- if (adj == "none") "are unadjusted" else
+    ci_adj <- if (adj %in% c("tukey", "scheffe", "sidak", "bonferroni", "mvt")) adj else "bonferroni"
+    adj_txt <- if (adj == "none") "are unadjusted" else if (ci_adj == adj) {
       sprintf("and CIs are %s-adjusted within each factor", adjust_name(adj))
+    } else {
+      sprintf("are %s-adjusted and their CIs %s-adjusted within each factor",
+              adjust_name(adj), adjust_name(ci_adj))
+    }
     or_txt <- if (any_or) " (ratios of odds for logistic models)" else ""
     lead <- if (only) "Contrasts" else "Pairwise contrasts"
     out <- c(out, sprintf(
@@ -220,10 +228,15 @@ table_notes <- function(x, spec, note = NULL) {
   }
   if (x$settings$dv_adjust != "none" && length(dvs) > 1) {
     terms <- x$settings$dv_adjust_terms
-    which_txt <- if (is.null(terms)) "All non-intercept p-values" else
-      sprintf("p-values for %s", paste(x$settings$var_labels[terms], collapse = ", "))
+    which_txt <- if (is.null(terms)) "All non-intercept p-values and CIs" else
+      sprintf("p-values and CIs for %s", paste(x$settings$var_labels[terms], collapse = ", "))
     out <- c(out, sprintf("%s are additionally %s-adjusted across the %d outcomes.",
                           which_txt, adjust_name(x$settings$dv_adjust), length(dvs)))
+  }
+  if (spec$effect_size && any(!is.na(x$estimates$es))) {
+    out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
+                        "within-group SD of the outcome (linear models) or the total SD, residual",
+                        "plus random-intercept variance (linear mixed models)."))
   }
   if (spec$stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
   c(paste("Note.", paste(out, collapse = " ")), note)

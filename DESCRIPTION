@@ -16,6 +16,7 @@ Depends: R (>= 4.1)
 Imports:
     stats,
     utils,
+    jsonlite,
     sandwich,
     clubSandwich,
     emmeans,
@@ -27,5 +28,6 @@ Suggests:
     lme4,
     lmerTest,
     testthat (>= 3.0.0),
-    rmarkdown
+    rmarkdown,
+    effectsize
 Config/testthat/edition: 3

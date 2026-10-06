@@ -31,6 +31,8 @@
 #' @param show_model_type Show the model type under each outcome name.
 #' @param note Extra note lines appended under the automatic note.
 #' @param auto_note Include the automatic methods note.
+#' @param effect_size Add a Cohen's *d* column for linear models (factor levels and
+#'   contrasts).
 #' @return An object of class `cr_table`.
 #' @export
 #' @examples
@@ -46,10 +48,10 @@
 cr_table <- function(x, style = "apa", uncertainty = NULL, p = NULL, layout = NULL,
                      contrasts = c("include", "exclude", "only"), digits = 2, p_digits = 3,
                      fit = TRUE, random = TRUE, show_model_type = TRUE, note = NULL,
-                     auto_note = TRUE) {
+                     auto_note = TRUE, effect_size = FALSE) {
   stopifnot(inherits(x, "clean_results"))
   contrasts <- match.arg(contrasts)
-  spec <- table_spec(style, uncertainty, p, layout, contrasts)
+  spec <- table_spec(style, uncertainty, p, layout, contrasts, effect_size)
   g <- build_grid(x, spec = spec, digits = digits, p_digits = p_digits,
                   fit = fit, random = random, show_model_type = show_model_type,
                   note = note)
@@ -121,7 +123,7 @@ cr_flextable <- function(x, font = "Times New Roman", font_size = 10) {
   }
   if (!is.null(g$sub_head)) {
     hi <- length(head_rows)
-    ital <- which(g$sub_head %in% c("b", "p", "OR", "SE")) + 1
+    ital <- which(g$sub_head %in% c("b", "p", "OR", "SE", "d")) + 1
     ft <- flextable::italic(ft, i = hi, j = ital, part = "header")
     ft <- flextable::italic(ft, i = hi, j = setdiff(seq_len(ncol(m))[-1], ital), italic = FALSE,
                             part = "header")
@@ -197,7 +199,7 @@ cr_latex <- function(x, caption = NULL, label = NULL, float = TRUE, placement = 
   if (!is.null(g$model_types)) head <- c(head, span_row(g$model_types, "\\textit{%s}"))
   head <- c(head, cmid)
   sh <- vapply(g$sub_head, function(s) {
-    if (s %in% c("b", "p")) sprintf("$%s$", s)
+    if (s %in% c("b", "p", "d")) sprintf("$%s$", s)
     else if (s %in% c("OR", "SE")) sprintf("\\textit{%s}", s)
     else esc(s)
   }, "")
