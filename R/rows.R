@@ -98,7 +98,7 @@ cr_rows.clean_results <- function(x, ...) {
       r$es_name <- ifelse(is.na(keep$es), NA_character_, "d")
     }
     r$n <- meta$n
-    r$conf_level <- x$settings$conf_level
+    r$conf_level <- if ("ci_level" %in% names(keep)) keep$ci_level else x$settings$conf_level
     out[[dv]] <- r
   }
   res <- do.call(rbind, out)

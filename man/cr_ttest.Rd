@@ -45,7 +45,8 @@ Bonferroni-adjusted to match, e.g. 98.3\% CIs for 3 pairs, so a CI that
 excludes zero agrees with the corrected \emph{p}. \code{adjust = "none"} gives
 ordinary 95\% CIs.}
 
-\item{dv_adjust}{Correction across outcomes for each pair.}
+\item{dv_adjust}{Correction across outcomes for each pair. CIs widen to
+match (Bonferroni across pairs x outcomes).}
 
 \item{effect}{\code{"d"} (Cohen's \emph{d}: pooled SD between subjects, \emph{d_z} paired)
 or \code{"g"} (Hedges' small-sample correction).}

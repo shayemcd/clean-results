@@ -209,7 +209,10 @@ random slopes included.
   other predictors, using the same covariance matrix as the coefficients.
   `contrast_adjust` adjusts their p-values and CIs within each factor.
 - **The across-outcome correction** (`dv_adjust`) treats each row as one
-  family across outcomes. For example, the three "Gain" p-values for three
+  family across outcomes, and widens those rows' CIs to match (Bonferroni
+  across the outcomes, on top of any within-factor adjustment). Text output
+  prints each CI's real level, e.g. "98.3% CI" for a Holm-adjusted contrast
+  among three conditions. For example, the three "Gain" p-values for three
   outcomes are corrected together. When both corrections are on, contrasts
   are adjusted within the factor first and then across outcomes, which is
   conservative. `cr_tidy()` keeps both `p.within` and the final `p.value`.

@@ -289,3 +289,38 @@ test_that("mixed-model d counts random-slope variance", {
   r <- cr_find(res, "trust", "condition", "Gain")
   expect_equal(r$es, r$estimate / sqrt(manual))
 })
+
+test_that("regression CIs carry their real level and widen with dv_adjust", {
+  d <- make_data()
+  base <- clean_regress(d, dvs = c(trust = "linear", score = "linear"),
+                        predictors = ~ condition + age, contrasts = "condition")
+  # Holm contrasts: emmeans gives Bonferroni CIs, so the text says 98.3%
+  expect_match(cr_inline(base, "trust", "condition", "Gain vs. Control"), "98\\.3% CI")
+  expect_match(cr_inline(base, "trust", "condition", "Gain"), "95% CI")
+  adj <- clean_regress(d, dvs = c(trust = "linear", score = "linear"),
+                       predictors = ~ condition + age, contrasts = "condition",
+                       dv_adjust = "bonferroni")
+  b <- cr_find(base, "trust", "condition", "Gain"); a <- cr_find(adj, "trust", "condition", "Gain")
+  expect_equal(a$conf_level, 1 - 0.05 / 2)
+  q <- qt(1 - 0.05 / 4, b$df)
+  expect_equal(a$conf.high, b$estimate + q * b$std.error)
+  ac <- cr_find(adj, "trust", "condition", "Loss vs. Gain")
+  expect_equal(ac$conf_level, 1 - 0.05 / 6)
+  expect_true(a$es.high - a$es.low > b$es.high - b$es.low)
+  # odds ratios rescale on the log scale
+  lg <- clean_regress(d, dvs = c(share = "logistic", bought = "logistic"),
+                      predictors = ~ condition, dv_adjust = "holm")
+  lb <- clean_regress(d, dvs = c(share = "logistic", bought = "logistic"),
+                      predictors = ~ condition)
+  o <- cr_find(lg, "share", "condition", "Loss"); ob <- cr_find(lb, "share", "condition", "Loss")
+  z <- qnorm(1 - 0.05 / 4) / qnorm(0.975)
+  expect_equal(log(o$conf.high / o$estimate), z * log(ob$conf.high / ob$estimate))
+  expect_match(paste(cr_table(adj)$grid$notes, collapse = " "), "p-values and CIs")
+})
+
+test_that("simple-test CIs cover pairs x outcomes when both are adjusted", {
+  d <- person_data()
+  tt <- cr_d(d, c("trust", "score"), "condition", dv_adjust = "holm")
+  expect_equal(unique(tt$rows$conf_level), 1 - 0.05 / 6)
+  expect_match(tt$rows$adjustment[1], "6 comparisons")
+})

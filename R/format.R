@@ -213,8 +213,13 @@ table_notes <- function(x, spec, note = NULL) {
   }
   if (show_contrasts) {
     adj <- x$settings$contrast_adjust
-    adj_txt <- if (adj == "none") "are unadjusted" else
+    ci_adj <- if (adj %in% c("tukey", "scheffe", "sidak", "bonferroni", "mvt")) adj else "bonferroni"
+    adj_txt <- if (adj == "none") "are unadjusted" else if (ci_adj == adj) {
       sprintf("and CIs are %s-adjusted within each factor", adjust_name(adj))
+    } else {
+      sprintf("are %s-adjusted and their CIs %s-adjusted within each factor",
+              adjust_name(adj), adjust_name(ci_adj))
+    }
     or_txt <- if (any_or) " (ratios of odds for logistic models)" else ""
     lead <- if (only) "Contrasts" else "Pairwise contrasts"
     out <- c(out, sprintf(
@@ -223,8 +228,8 @@ table_notes <- function(x, spec, note = NULL) {
   }
   if (x$settings$dv_adjust != "none" && length(dvs) > 1) {
     terms <- x$settings$dv_adjust_terms
-    which_txt <- if (is.null(terms)) "All non-intercept p-values" else
-      sprintf("p-values for %s", paste(x$settings$var_labels[terms], collapse = ", "))
+    which_txt <- if (is.null(terms)) "All non-intercept p-values and CIs" else
+      sprintf("p-values and CIs for %s", paste(x$settings$var_labels[terms], collapse = ", "))
     out <- c(out, sprintf("%s are additionally %s-adjusted across the %d outcomes.",
                           which_txt, adjust_name(x$settings$dv_adjust), length(dvs)))
   }
