@@ -145,3 +145,15 @@ test_that("Bayesian models report medians, credible intervals, and pd", {
   expect_error(cr_equivalence(res, bounds = 0.2, dv = "trust", variable = "condition",
                               level = "Gain"), "ROPE")
 })
+
+test_that("model calls refer to the data by name instead of inlining it", {
+  res <- clean_regress(make_data(), dvs = c(trust = "linear", share = "logistic"),
+                       predictors = ~ condition + age, random = ~ (1 | id))
+  for (m in res$models) {
+    call_txt <- paste(deparse(stats::getCall(m)), collapse = " ")
+    expect_false(grepl("structure(list", call_txt, fixed = TRUE))
+    expect_lt(length(capture.output(summary(m))), 100)
+  }
+  # the data can still be recovered from the model, as emmeans and update() need
+  expect_s4_class(emmeans::emmeans(res$models$trust, ~ condition), "emmGrid")
+})

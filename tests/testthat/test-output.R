@@ -51,3 +51,32 @@ test_that("cr_inline reports APA strings", {
   expect_match(cr_inline(res, "trust", "age", stats = "test"), "\\*t\\*\\(")
   expect_error(cr_inline(res, "trust", "condition", "Control"), "reference")
 })
+
+test_that("omit hides matched rows from the table and lists them in the note", {
+  res <- res_fixture()
+  full <- cr_table(res)
+  tab <- cr_table(res, omit = "^condition$")
+  labs <- function(t) vapply(t$grid$rows, `[[`, "", "label")
+  expect_true(any(labs(full) == "Condition"))
+  expect_false(any(labs(tab) %in% c("Condition", "Gain", "Loss", "Control (ref.)")))
+  expect_true(any(labs(tab) == "Age"))
+  expect_true(any(grepl("Also controls for: Condition.", tab$grid$notes, fixed = TRUE)))
+  expect_identical(cr_table(res, omit = NULL)$grid, full$grid)
+  # the underlying results keep every row
+  expect_identical(tab$results$estimates, res$estimates)
+  expect_false(any(grepl("Also controls", cr_table(res, omit = "^condition$", auto_note = FALSE)$grid$notes)))
+  expect_warning(cr_table(res, omit = "^nomatch$"), "matched no table rows")
+  tex <- cr_latex(tab)
+  expect_false(grepl("Gain", tex, fixed = TRUE))
+})
+
+test_that("not-estimable coefficients print blank, without empty parentheses", {
+  set.seed(1)
+  d <- data.frame(y = rnorm(100), a = rep(c(TRUE, FALSE), 50), b = rep(c(FALSE, TRUE), each = 50))
+  d$c <- FALSE
+  r <- clean_regress(d, dvs = c(y = "linear"), predictors = ~ a + b + c, se = "model")
+  tex <- cr_latex(cr_table(r, style = "stargazer"))
+  expect_false(grepl("& () \\\\", tex, fixed = TRUE))
+  expect_true(grepl("not estimable", tex, fixed = TRUE))
+  expect_false(any(grepl("not estimable", cr_table(res_fixture())$grid$notes)))
+})

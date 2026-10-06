@@ -18,7 +18,8 @@ cr_table(
   show_model_type = TRUE,
   note = NULL,
   auto_note = TRUE,
-  effect_size = FALSE
+  effect_size = FALSE,
+  omit = NULL
 )
 }
 \arguments{
@@ -55,6 +56,13 @@ below the estimate), or \code{"inline"} (one cell: \code{0.46 (0.21)} or
 
 \item{effect_size}{Add a Cohen's \emph{d} column for linear models (factor levels and
 contrasts).}
+
+\item{omit}{Regular expression matched against model term labels (the
+\code{variable} column of \code{\link[=cr_tidy]{cr_tidy()}}, e.g. \code{"Topic"}, \code{"Month"},
+\code{"age:condition"}): matching rows are left out of the table, typically
+nuisance controls. They stay in the fitted models and in \code{\link[=cr_tidy]{cr_tidy()}},
+\code{\link[=cr_report]{cr_report()}}, and \code{\link[=cr_ground_truth]{cr_ground_truth()}}. With \code{auto_note = TRUE} the note
+lists them ("Also controls for: ...").}
 }
 \value{
 An object of class \code{cr_table}.
@@ -81,5 +89,6 @@ cr_table(res, uncertainty = "se", layout = "inline", p = "stars")  # 0.46* (0.21
 cr_table(res, style = "stargazer")              # stacked SEs with stars
 cr_table(res, contrasts = "exclude")            # main table without contrasts
 cr_contrast_table(res)                          # contrasts in their own table
+cr_table(res, omit = "^(region|wave)$")         # hide nuisance controls
 }
 }

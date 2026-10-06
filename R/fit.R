@@ -93,44 +93,37 @@ build_formula <- function(dv, predictors, random, extra = NULL) {
 }
 
 fit_one <- function(type, formula, data, fit_args = list()) {
-  args <- c(list(formula = formula, data = data), fit_args)
+  if (type %in% c("ordinal", "ordinal_mixed")) {
+    data[[response_name(formula)]] <- as_ordered(data[[response_name(formula)]])
+  }
+  if (!type %in% c("lm", "logit", "poisson", "negbin", "lmer", "glmer", "poisson_mixed",
+                   "negbin_mixed", "ordinal", "ordinal_mixed")) {
+    return(fit_bayes(type, c(list(formula = formula, data = data), fit_args)))
+  }
+  # Build the call with the fitter's name and a `data` symbol evaluated in a small
+  # environment, instead of do.call() with the data frame itself: do.call() inlines the
+  # whole data set into the model's stored call, so summary()/print() deparse every row
+  # (hundreds of MB for a large sample) and the call is unreadable. The formula gets the
+  # same environment so tools that recover the data later (emmeans, update) find it.
+  env <- new.env(parent = environment(formula) %||% globalenv())
+  env$data <- data
+  environment(formula) <- env
+  fitter <- switch(type,
+    lm = quote(stats::lm), logit = quote(stats::glm), poisson = quote(stats::glm),
+    negbin = quote(MASS::glm.nb), lmer = quote(lmerTest::lmer), glmer = quote(lme4::glmer),
+    poisson_mixed = quote(lme4::glmer), negbin_mixed = quote(glmmTMB::glmmTMB),
+    ordinal = quote(ordinal::clm), ordinal_mixed = quote(ordinal::clmm))
+  family <- switch(type,
+    logit = , glmer = quote(stats::binomial()), poisson = , poisson_mixed = quote(stats::poisson()),
+    negbin_mixed = quote(glmmTMB::nbinom2()), NULL)
   switch(type,
-    lm    = do.call(stats::lm, args),
-    logit = do.call(stats::glm, c(args, list(family = stats::binomial()))),
-    # Poisson quasi-ML also suits non-integer skewed outcomes (ratio of means)
-    poisson = suppressWarnings(do.call(stats::glm, c(args, list(family = stats::poisson())))),
-    negbin = {
-      need_pkg("MASS")
-      do.call(MASS::glm.nb, args)
-    },
-    lmer  = {
-      need_pkg("lme4"); need_pkg("lmerTest")
-      do.call(lmerTest::lmer, args)
-    },
-    glmer = {
-      need_pkg("lme4")
-      do.call(lme4::glmer, c(args, list(family = stats::binomial())))
-    },
-    poisson_mixed = {
-      need_pkg("lme4")
-      do.call(lme4::glmer, c(args, list(family = stats::poisson())))
-    },
-    negbin_mixed = {
-      need_pkg("glmmTMB")
-      do.call(glmmTMB::glmmTMB, c(args, list(family = glmmTMB::nbinom2())))
-    },
-    ordinal = {
-      need_pkg("ordinal")
-      args$data[[response_name(formula)]] <- as_ordered(args$data[[response_name(formula)]])
-      do.call(ordinal::clm, args)
-    },
-    ordinal_mixed = {
-      need_pkg("ordinal")
-      args$data[[response_name(formula)]] <- as_ordered(args$data[[response_name(formula)]])
-      do.call(ordinal::clmm, args)
-    },
-    fit_bayes(type, args)
-  )
+    negbin = need_pkg("MASS"), lmer = { need_pkg("lme4"); need_pkg("lmerTest") },
+    glmer = , poisson_mixed = need_pkg("lme4"), negbin_mixed = need_pkg("glmmTMB"),
+    ordinal = , ordinal_mixed = need_pkg("ordinal"), NULL)
+  cl <- as.call(c(list(fitter, formula = formula, data = quote(data)),
+                  if (!is.null(family)) list(family = family), fit_args))
+  # Poisson quasi-ML also suits non-integer skewed outcomes (ratio of means)
+  if (type == "poisson") suppressWarnings(eval(cl, env)) else eval(cl, env)
 }
 
 fit_bayes <- function(type, args) {
