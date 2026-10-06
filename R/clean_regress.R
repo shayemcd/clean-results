@@ -116,6 +116,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     ctr <- pairwise_rows(m, mtype, d_i, cvars, V, se, contrast_adjust, conf_level,
                          exp_i, lab_fun)
     est <- rbind(fixed[, names(ctr %||% fixed)], ctr)
+    est <- add_std_diff(est, m, mtype)
     est$dv <- dv
     est$p.within <- est$p.value
     est_list[[dv]] <- est
@@ -127,7 +128,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
       se_text = se_method_text(mtype, se,
                                if (!is.null(cluster_name)) lab_fun$var(cluster_name)),
       robust_fallback = se == "robust" && !robust_available(mtype),
-      contrast_vars = cvars, n = stats::nobs(m)
+      contrast_vars = cvars, n = stats::nobs(m), d_sd = std_sd(m, mtype)
     )
   }
 
@@ -195,6 +196,30 @@ adjust_across_dvs <- function(est, method, terms, n_dv) {
     est$p.value[idx] <- stats::p.adjust(est$p.within[idx], method = method)
   }
   est$dv_adjusted <- eligible
+  est
+}
+
+# Standardized mean differences (Cohen's d) for linear models: factor-level and
+# contrast rows divided by the residual SD (lm) or the total SD, residual plus
+# random-intercept variances (lmer; Westfall, Kenny, & Judd, 2014).
+std_sd <- function(model, type) {
+  if (type == "lm") return(stats::sigma(model))
+  if (type == "lmer") {
+    vc <- as.data.frame(lme4::VarCorr(model))
+    tau <- sum(vc$vcov[vc$grp != "Residual" & is.na(vc$var2) & vc$var1 %in% "(Intercept)"])
+    return(sqrt(stats::sigma(model)^2 + tau))
+  }
+  NA_real_
+}
+
+add_std_diff <- function(est, model, type) {
+  sdv <- std_sd(model, type)
+  est$es <- est$es.low <- est$es.high <- NA_real_
+  if (is.na(sdv)) return(est)
+  ok <- est$row_type == "level" & !est$is_ref
+  est$es[ok] <- est$estimate[ok] / sdv
+  est$es.low[ok] <- est$conf.low[ok] / sdv
+  est$es.high[ok] <- est$conf.high[ok] / sdv
   est
 }
 

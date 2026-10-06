@@ -8,8 +8,14 @@
 #'   paste into Google Docs or an email.
 #' * `.csv`: the formatted cells, for anything else.
 #'
-#' @param x A `clean_results` or `cr_table` object. Pass a `cr_table` to control
-#'   the style, e.g. `cr_save(cr_table(res, style = "se"), "t2.tex")`.
+#' Report text from [cr_report()] saves to `.tex` (for `\input{}` in
+#' Overleaf), `.md`, `.html` (open in a browser and paste into Google Docs to
+#' keep italics), or `.txt`. A [cr_ground_truth()] saves to `.json`, `.md`, or
+#' `.csv`.
+#'
+#' @param x A `clean_results`, `cr_table`, `cr_text`, or `cr_ground_truth`
+#'   object. Pass a `cr_table` to control the table style, e.g.
+#'   `cr_save(cr_table(res, style = "se"), "t2.tex")`.
 #' @param path Output file path.
 #' @param caption Table caption (LaTeX and Word/HTML).
 #' @param label LaTeX `\label{}` key, e.g. `"tab:main"`.
@@ -18,10 +24,18 @@
 #' @return `path`, invisibly.
 #' @export
 cr_save <- function(x, path, caption = NULL, label = NULL, landscape = FALSE, ...) {
-  tbl <- as_cr_table(x)
   ext <- tolower(tools::file_ext(path))
   dir <- dirname(path)
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+  if (inherits(x, "cr_text")) {
+    save_text(x, path)
+    return(invisible(path))
+  }
+  if (inherits(x, "cr_ground_truth")) {
+    write_ground_truth(x, path)
+    return(invisible(path))
+  }
+  tbl <- as_cr_table(x)
 
   switch(ext,
     docx = {
@@ -79,65 +93,4 @@ cr_tidy <- function(x) {
   e$estimate_type <- vapply(e$dv, function(d) if (x$meta[[d]]$exponentiate) "OR" else "b", "")
   rownames(e) <- NULL
   e
-}
-
-#' Report one result in text (APA style)
-#'
-#' Use inside Quarto/R Markdown inline code, e.g.
-#' `` `r cr_inline(res, "trust", "condition", "Loss")` `` gives
-#' "*b* = -0.46, 95% CI \\[-0.83, -0.09\\], *p* = .017".
-#'
-#' @param x A `clean_results` object.
-#' @param dv Outcome name.
-#' @param variable Predictor name, or a coefficient name such as `"age"`.
-#' @param level Factor level as in the data (`"LossFraming"`) or as displayed
-#'   (`"Loss framing"`); for contrasts, `"Loss vs. Gain"` in either form.
-#' @param stats Which pieces to include, in order: any of `"est"`, `"se"`,
-#'   `"ci"`, `"test"`, `"p"`.
-#' @param format `"markdown"` (Quarto/R Markdown), `"latex"`, or `"plain"`
-#'   (for pasting into Google Docs or Word).
-#' @param digits,p_digits Decimal places.
-#' @return A character string.
-#' @export
-cr_inline <- function(x, dv, variable, level = NULL, stats = c("est", "ci", "p"),
-                      format = c("markdown", "latex", "plain"), digits = 2, p_digits = 3) {
-  format <- match.arg(format)
-  e <- x$estimates
-  e <- e[e$dv == dv & e$row_type != "header", , drop = FALSE]
-  if (!nrow(e)) stop(sprintf("Outcome '%s' not found.", dv), call. = FALSE)
-  if (!is.null(level)) {
-    sec <- if (grepl(" vs. ", level, fixed = TRUE)) "contrast" else "fixed"
-    r <- e[e$section == sec & e$variable == variable &
-             (e$level %in% level | sub(" (ref.)", "", e$label, fixed = TRUE) == level), ,
-           drop = FALSE]
-  } else {
-    r <- e[e$section == "fixed" & (e$term %in% variable |
-             (e$variable == variable & e$row_type == "term")), , drop = FALSE]
-  }
-  if (nrow(r) != 1) {
-    stop(sprintf("Could not find a unique row for %s%s in '%s'. See cr_tidy(x).",
-                 variable, if (!is.null(level)) paste0(" / ", level) else "", dv), call. = FALSE)
-  }
-  if (isTRUE(r$is_ref)) stop("That is the reference category; it has no estimate.", call. = FALSE)
-
-  it <- switch(format, markdown = function(s) paste0("*", s, "*"),
-               latex = function(s) paste0("\\textit{", s, "}"), plain = identity)
-  est_sym <- if (x$meta[[dv]]$exponentiate) "OR" else "b"
-  stat_sym <- if (is.finite(r$df)) "t" else "z"
-  df_txt <- if (is.finite(r$df)) {
-    sprintf("(%s)", if (abs(r$df - round(r$df)) < 1e-8) round(r$df) else fmt_num(r$df, 1))
-  } else ""
-  ptxt <- fmt_p(r$p.value, p_digits)
-  p_part <- if (startsWith(ptxt, "<")) paste(it("p"), ptxt) else paste(it("p"), "=", ptxt)
-  pct <- if (format == "latex") "\\%" else "%"
-
-  pieces <- list(
-    est = sprintf("%s = %s", it(est_sym), fmt_num(r$estimate, digits)),
-    se = sprintf("%s = %s", it("SE"), fmt_num(r$std.error, digits)),
-    ci = sprintf("%g%s CI [%s, %s]", 100 * x$settings$conf_level, pct,
-                 fmt_num(r$conf.low, digits), fmt_num(r$conf.high, digits)),
-    test = sprintf("%s%s = %s", it(stat_sym), df_txt, fmt_num(r$statistic, digits)),
-    p = p_part
-  )
-  paste(unlist(pieces[stats]), collapse = ", ")
 }
