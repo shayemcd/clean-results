@@ -42,7 +42,10 @@ below 5), \code{TRUE}, or \code{FALSE}.}
 success (default: the last level, \code{TRUE}, or \code{1}).}
 
 \item{adjust}{Correction across the pairs of each outcome (any
-\code{\link[stats:p.adjust]{stats::p.adjust()}} method).}
+\code{\link[stats:p.adjust]{stats::p.adjust()}} method). When on, CIs (mean difference and \emph{d}) are
+Bonferroni-adjusted to match, e.g. 98.3\% CIs for 3 pairs, so a CI that
+excludes zero agrees with the corrected \emph{p}. \code{adjust = "none"} gives
+ordinary 95\% CIs.}
 
 \item{dv_adjust}{Correction across outcomes for each pair.}
 

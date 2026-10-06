@@ -203,8 +203,9 @@ adjust_across_dvs <- function(est, method, terms, n_dv) {
 # lm: the difference divided by the pooled within-group SD of the raw outcome
 #   across that factor's levels, so covariates don't inflate d (the residual SD
 #   shrinks as covariates explain variance; Lakens, 2013).
-# lmer: divided by the total SD, sqrt(residual + random-intercept variances)
-#   (Westfall, Kenny, & Judd, 2014; Brysbaert & Stevens, 2018).
+# lmer: divided by the total SD of one observation: sqrt(residual variance +
+#   the variance the random effects add, slopes included) (Westfall, Kenny, &
+#   Judd, 2014; Brysbaert & Stevens, 2018).
 std_sd <- function(model, type, variable = NULL) {
   if (type == "lm") {
     if (is.null(variable)) return(NA_real_)
@@ -219,12 +220,26 @@ std_sd <- function(model, type, variable = NULL) {
     keep <- n_g > 1
     return(sqrt(sum((n_g[keep] - 1) * v_g[keep]) / (sum(n_g[keep]) - sum(keep))))
   }
-  if (type == "lmer") {
-    vc <- as.data.frame(lme4::VarCorr(model))
-    tau <- sum(vc$vcov[vc$grp != "Residual" & is.na(vc$var2) & vc$var1 %in% "(Intercept)"])
-    return(sqrt(stats::sigma(model)^2 + tau))
-  }
+  if (type == "lmer") return(sqrt(stats::sigma(model)^2 + random_variance(model)))
   NA_real_
+}
+
+# Average variance the random effects add to one observation: mean over rows
+# of z' Sigma z for each grouping term, so random slopes (and their
+# covariances) count in proportion to the predictor values in the data
+# (Johnson, 2014). With random intercepts only this is the sum of the
+# intercept variances.
+random_variance <- function(model) {
+  vc <- lme4::VarCorr(model)
+  mm <- lme4::getME(model, "mmList")
+  total <- 0
+  for (k in seq_along(vc)) {
+    Sigma <- as.matrix(vc[[k]])
+    Z <- as.matrix(mm[[k]])
+    Z <- Z[, colnames(Sigma), drop = FALSE]
+    total <- total + mean(rowSums((Z %*% Sigma) * Z))
+  }
+  total
 }
 
 add_std_diff <- function(est, model, type) {

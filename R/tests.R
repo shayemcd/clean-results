@@ -44,6 +44,20 @@ nct_ci <- function(t, df, scale, level) {
   c(lo, hi) * scale
 }
 
+# Confidence level that matches a p-value correction across m comparisons.
+# Holm, Hochberg, and FDR have no matching CI, so Bonferroni intervals are the
+# standard simultaneous companion (they are never narrower than needed).
+adjusted_level <- function(conf_level, adjust, m) {
+  if (adjust == "none" || m < 2) return(conf_level)
+  1 - (1 - conf_level) / m
+}
+
+ci_note <- function(conf_level, level, m) {
+  if (isTRUE(all.equal(level, conf_level))) return(NULL)
+  sprintf("CIs Bonferroni-adjusted for %d comparisons (%s%% level)", m,
+          format(round(100 * level, 1)))
+}
+
 make_id <- function(...) {
   parts <- c(...)
   paste(parts[!is.na(parts)], collapse = "::")
@@ -96,7 +110,10 @@ finish_adjust <- function(rows, adjust, dv_adjust) {
 #' @param id Participant column for within-subject (paired) comparisons.
 #' @param by Optional column: run every comparison within each subgroup.
 #' @param adjust Correction across the pairs of each outcome (any
-#'   [stats::p.adjust()] method).
+#'   [stats::p.adjust()] method). When on, CIs (mean difference and *d*) are
+#'   Bonferroni-adjusted to match, e.g. 98.3% CIs for 3 pairs, so a CI that
+#'   excludes zero agrees with the corrected *p*. `adjust = "none"` gives
+#'   ordinary 95% CIs.
 #' @param dv_adjust Correction across outcomes for each pair.
 #' @param effect `"d"` (Cohen's *d*: pooled SD between subjects, *d_z* paired)
 #'   or `"g"` (Hedges' small-sample correction).
@@ -119,6 +136,7 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
   lab <- make_labeller(c(labels, dv_labels), level_labels, clean_labels)
   levs <- group_levels(data[[group]])
   prs <- resolve_pairs(levs, pairs, ref)
+  lvl <- adjusted_level(conf_level, adjust, length(prs))
   out <- list()
   for (y in dv) for (sg in split_by(data, by)) for (p in prs) {
     dd <- sg$data
@@ -129,11 +147,11 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
       xa <- stats::na.omit(a[[y]]); xb <- stats::na.omit(b[[y]])
       n1 <- length(xa); n2 <- length(xb)
       if (n1 < 2 || n2 < 2) next
-      tt <- stats::t.test(xa, xb, conf.level = conf_level)
+      tt <- stats::t.test(xa, xb, conf.level = lvl)
       sp <- sqrt(((n1 - 1) * stats::var(xa) + (n2 - 1) * stats::var(xb)) / (n1 + n2 - 2))
       es <- (mean(xa) - mean(xb)) / sp
       dfp <- n1 + n2 - 2
-      ci <- nct_ci(es * sqrt(n1 * n2 / (n1 + n2)), dfp, sqrt((n1 + n2) / (n1 * n2)), conf_level)
+      ci <- nct_ci(es * sqrt(n1 * n2 / (n1 + n2)), dfp, sqrt((n1 + n2) / (n1 * n2)), lvl)
       r$model_type <- "Welch t-test"
       r$n <- n1 + n2
     } else {
@@ -142,11 +160,11 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
       xa <- m[[paste0(y, ".a")]]; xb <- m[[paste0(y, ".b")]]
       n1 <- n2 <- nrow(m)
       if (n1 < 2) next
-      tt <- stats::t.test(xa, xb, paired = TRUE, conf.level = conf_level)
+      tt <- stats::t.test(xa, xb, paired = TRUE, conf.level = lvl)
       dif <- xa - xb
       es <- mean(dif) / stats::sd(dif)
       dfp <- n1 - 1
-      ci <- nct_ci(es * sqrt(n1), dfp, 1 / sqrt(n1), conf_level)
+      ci <- nct_ci(es * sqrt(n1), dfp, 1 / sqrt(n1), lvl)
       r$model_type <- "paired t-test"
       r$n <- n1
     }
@@ -172,11 +190,12 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
     r$es_name <- effect; r$es <- es; r$es.low <- ci[1]; r$es.high <- ci[2]
     r$m1 <- mean(xa); r$sd1 <- stats::sd(xa); r$n1 <- n1
     r$m2 <- mean(xb); r$sd2 <- stats::sd(xb); r$n2 <- n2
-    r$conf_level <- conf_level
+    r$conf_level <- lvl
     out[[length(out) + 1]] <- r
   }
   if (!length(out)) stop("No comparisons had at least two observations per group.", call. = FALSE)
   rows <- finish_adjust(do.call(rbind, out), adjust, dv_adjust)
+  rows$adjustment <- add_note(rows$adjustment, ci_note(conf_level, lvl, length(prs)))
   new_tests(rows, if (is.null(id)) "Welch t-test" else "paired t-test", unique(rows$adjustment))
 }
 
@@ -276,14 +295,16 @@ cr_chisq <- function(data, dv, group, pairs = NULL, ref = NULL, by = NULL, exact
       yv <- group_levels(dd[[y]])
       if (length(yv) != 2) stop("Pairwise comparisons need a binary outcome.", call. = FALSE)
       succ <- as.character(success %||% if ("TRUE" %in% yv) "TRUE" else if ("1" %in% yv) "1" else yv[2])
-      for (p in resolve_pairs(group_levels(dd[[group]]), pairs, ref)) {
+      prs <- resolve_pairs(group_levels(dd[[group]]), pairs, ref)
+      plvl <- adjusted_level(conf_level, adjust, length(prs))
+      for (p in prs) {
         xa <- as.character(dd[[y]][as.character(dd[[group]]) == p[1]])
         xb <- as.character(dd[[y]][as.character(dd[[group]]) == p[2]])
         s1 <- sum(xa == succ); s2 <- sum(xb == succ); n1 <- length(xa); n2 <- length(xb)
         t2 <- matrix(c(s1, n1 - s1, s2, n2 - s2), 2, byrow = TRUE)
         c2 <- suppressWarnings(stats::chisq.test(t2, correct = FALSE))
         pr <- suppressWarnings(stats::prop.test(c(s1, s2), c(n1, n2), correct = FALSE,
-                                                conf.level = conf_level))
+                                                conf.level = plvl))
         p1 <- s1 / n1; p2 <- s2 / n2
         rr <- empty_rows(1)
         rr$id <- make_id("chisq", y, group, paste(p, collapse = " vs. "), sg$name)
@@ -302,10 +323,11 @@ cr_chisq <- function(data, dv, group, pairs = NULL, ref = NULL, by = NULL, exact
           rr$stat_name <- "Fisher's exact"; rr$model_type <- "Fisher's exact test"
         }
         h <- 2 * asin(sqrt(p1)) - 2 * asin(sqrt(p2))
-        z <- stats::qnorm(1 - (1 - conf_level) / 2) * sqrt(1 / n1 + 1 / n2)
+        z <- stats::qnorm(1 - (1 - plvl) / 2) * sqrt(1 / n1 + 1 / n2)
         rr$es_name <- "h"; rr$es <- h; rr$es.low <- h - z; rr$es.high <- h + z
         rr$m1 <- p1; rr$n1 <- n1; rr$m2 <- p2; rr$n2 <- n2; rr$n <- n1 + n2
-        rr$conf_level <- conf_level
+        rr$conf_level <- plvl
+        rr$adjustment <- ci_note(conf_level, plvl, length(prs)) %||% NA_character_
         out[[length(out) + 1]] <- rr
       }
     }
@@ -314,7 +336,10 @@ cr_chisq <- function(data, dv, group, pairs = NULL, ref = NULL, by = NULL, exact
   pw <- rows$section == "pairwise"
   rows$p.within <- rows$p.value
   if (any(pw)) {
+    notes <- rows$adjustment[pw]
     adj <- finish_adjust(rows[pw, , drop = FALSE], adjust, dv_adjust)
+    adj$adjustment <- ifelse(is.na(notes), adj$adjustment,
+                             ifelse(is.na(adj$adjustment), notes, paste(adj$adjustment, notes, sep = "; ")))
     rows[pw, ] <- adj
   }
   new_tests(rows, "chi-square", if (any(pw)) unique(rows$adjustment[pw]) else NULL)
@@ -378,12 +403,13 @@ cr_cor <- function(data, vars, method = c("pearson", "spearman"), adjust = "none
   check_cols(data, c(vars, by))
   lab <- make_labeller(labels, NULL, clean_labels)
   cmb <- utils::combn(vars, 2)
+  lvl <- adjusted_level(conf_level, adjust, ncol(cmb))
   out <- list()
   for (sg in split_by(data, by)) for (j in seq_len(ncol(cmb))) {
     a <- cmb[1, j]; b <- cmb[2, j]
     dd <- sg$data[stats::complete.cases(sg$data[, c(a, b)]), , drop = FALSE]
     ct <- suppressWarnings(stats::cor.test(dd[[a]], dd[[b]], method = method,
-                                           conf.level = conf_level, exact = FALSE))
+                                           conf.level = lvl, exact = FALSE))
     r <- empty_rows(1)
     r$id <- make_id("cor", a, b, sg$name)
     r$kind <- "cor"; r$model_type <- paste(method, "correlation")
@@ -399,7 +425,7 @@ cr_cor <- function(data, vars, method = c("pearson", "spearman"), adjust = "none
       r$df <- nrow(dd) - 2
     }
     r$p.value <- ct$p.value
-    r$n <- nrow(dd); r$conf_level <- conf_level
+    r$n <- nrow(dd); r$conf_level <- lvl
     out[[length(out) + 1]] <- r
   }
   rows <- do.call(rbind, out)
@@ -409,9 +435,15 @@ cr_cor <- function(data, vars, method = c("pearson", "spearman"), adjust = "none
       ix <- which(rows$subgroup %in% g)
       rows$p.value[ix] <- rows$p.within[ix] <- stats::p.adjust(rows$p.value[ix], adjust)
     }
-    rows$adjustment <- paste(adjust_name(adjust), "across pairs")
+    rows$adjustment <- paste(c(paste(adjust_name(adjust), "across pairs"),
+                               ci_note(conf_level, lvl, ncol(cmb))), collapse = "; ")
   }
   new_tests(rows, "correlation", if (adjust != "none") rows$adjustment[1])
+}
+
+add_note <- function(x, note) {
+  if (is.null(note)) return(x)
+  ifelse(is.na(x), note, paste(x, note, sep = "; "))
 }
 
 check_cols <- function(data, cols) {

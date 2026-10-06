@@ -81,7 +81,7 @@ stats_text <- function(r, stats = NULL, format = "markdown", style = "apa", digi
                        p_digits = 3) {
   f <- text_fmt(format, style)
   stats <- stats %||% default_stats(r$kind, f$style)
-  ci_lab <- sprintf("%g%s CI", 100 * r$conf_level, f$pct)
+  ci_lab <- sprintf("%s%s CI", format(round(100 * r$conf_level, 1)), f$pct)
   est_name <- r$est_name %||% NA
   piece <- function(s) {
     switch(s,

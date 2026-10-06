@@ -233,3 +233,59 @@ test_that("tables can show d", {
   expect_match(paste(tb$grid$notes, collapse = " "), "standardized mean difference")
   expect_match(paste(cr_latex(tb), collapse = "\n"), "\\$d\\$")
 })
+
+test_that("d, g, and d_z agree with the effectsize package", {
+  skip_if_not_installed("effectsize")
+  d <- person_data()
+  x <- cr_d(d, "trust", "condition", pairs = "Gain vs. Control", adjust = "none")$rows
+  sub <- droplevels(subset(d, condition %in% c("Gain", "Control")))
+  sub$condition <- relevel(sub$condition, "Gain")
+  e <- effectsize::cohens_d(trust ~ condition, data = sub)
+  expect_equal(c(x$es, x$es.low, x$es.high), c(e$Cohens_d, e$CI_low, e$CI_high),
+               tolerance = 1e-4)
+  g <- cr_d(d, "trust", "condition", pairs = "Gain vs. Control", effect = "g",
+            adjust = "none")$rows
+  eg <- effectsize::hedges_g(trust ~ condition, data = sub)
+  expect_equal(c(g$es, g$es.low, g$es.high), c(eg$Hedges_g, eg$CI_low, eg$CI_high),
+               tolerance = 1e-3)   # Hedges' J: approximation vs exact gamma form
+  w <- make_data()
+  w$time <- rep(c("pre", "post"), length.out = nrow(w))
+  w <- w[!duplicated(paste(w$id, w$time)), ]
+  z <- cr_ttest(w, "trust", "time", id = "id", pairs = "post vs. pre")$rows
+  wide <- reshape(w[, c("id", "time", "trust")], idvar = "id", timevar = "time",
+                  direction = "wide")
+  ez <- effectsize::cohens_d(wide$trust.post, wide$trust.pre, paired = TRUE)
+  expect_equal(c(z$es, z$es.low, z$es.high), c(ez[[1]], ez$CI_low, ez$CI_high),
+               tolerance = 1e-4)
+})
+
+test_that("CIs are Bonferroni-adjusted when p-values are", {
+  d <- person_data()
+  adj <- cr_d(d, "trust", "condition")             # 3 pairs, Holm
+  raw <- cr_d(d, "trust", "condition", adjust = "none")
+  expect_equal(unique(adj$rows$conf_level), 1 - 0.05 / 3)
+  expect_true(all(adj$rows$es.high - adj$rows$es.low > raw$rows$es.high - raw$rows$es.low))
+  expect_match(cr_inline(adj, "trust", "condition", "Gain vs. Control", stats = "es"),
+               "98\\.3% CI")
+  expect_match(adj$rows$adjustment[1], "Bonferroni-adjusted for 3 comparisons")
+  # a CI that excludes zero always comes with a significant Holm p
+  ex <- adj$rows$es.low > 0 | adj$rows$es.high < 0
+  expect_true(all(adj$rows$p.value[ex] < .05))
+  expect_equal(unique(raw$rows$conf_level), 0.95)
+  ch <- cr_chisq(d, "share", "condition", pairs = "all", exact = FALSE)
+  expect_equal(unique(ch$rows$conf_level[ch$rows$section == "pairwise"]), 1 - 0.05 / 3)
+})
+
+test_that("mixed-model d counts random-slope variance", {
+  d <- make_data()
+  d$t <- rep(0:3, length.out = nrow(d))
+  res <- suppressMessages(clean_regress(d, dvs = c(trust = "linear"),
+                                        predictors = ~ condition + t,
+                                        random = ~ (1 + t | id)))
+  m <- res$models$trust
+  vc <- lme4::VarCorr(m)$id
+  zz <- cbind(1, d$t)
+  manual <- mean(rowSums((zz %*% vc) * zz)) + sigma(m)^2
+  r <- cr_find(res, "trust", "condition", "Gain")
+  expect_equal(r$es, r$estimate / sqrt(manual))
+})
