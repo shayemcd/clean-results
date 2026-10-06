@@ -2,4 +2,5 @@
 "_PACKAGE"
 
 #' @importFrom emmeans emmeans
+#' @importFrom ggplot2 .data
 NULL

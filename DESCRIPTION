@@ -23,7 +23,8 @@ Imports:
     flextable,
     officer,
     tools,
-    knitr
+    knitr,
+    ggplot2
 Suggests:
     lme4,
     lmerTest,
@@ -35,5 +36,6 @@ Suggests:
     glmmTMB,
     brms,
     bayestestR,
-    rstan
+    rstan,
+    svglite
 Config/testthat/edition: 3
