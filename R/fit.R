@@ -1,38 +1,78 @@
 # Model fitting ---------------------------------------------------------------
+#
+# Each internal type is one estimator. "linear", "logistic", "poisson",
+# "negbin", and "ordinal" resolve to their mixed version when a random term is
+# given; "bayes_*" types fit the same families in brms with or without random
+# terms.
 
 .type_aliases <- c(
   lm = "lm", ols = "lm",
   logit = "logit", glm = "logit", binomial = "logit",
   lmer = "lmer", lmm = "lmer", mixed_linear = "lmer",
-  glmer = "glmer", glmm = "glmer", mixed_logistic = "glmer", mixed_logit = "glmer"
+  glmer = "glmer", glmm = "glmer", mixed_logistic = "glmer", mixed_logit = "glmer",
+  poisson_glm = "poisson", glmer_poisson = "poisson_mixed",
+  glm.nb = "negbin", nb = "negbin", glmmtmb = "negbin_mixed",
+  clm = "ordinal", polr = "ordinal", clmm = "ordinal_mixed",
+  bayes_linear = "bayes_linear", bayes_gaussian = "bayes_linear",
+  bayes_logistic = "bayes_logistic", bayes_logit = "bayes_logistic",
+  bayes_ordinal = "bayes_ordinal", bayes_poisson = "bayes_poisson",
+  bayes_negbin = "bayes_negbin"
+)
+
+# type: c(fixed version, mixed version)
+.type_pairs <- list(
+  linear = c("lm", "lmer"), gaussian = c("lm", "lmer"),
+  logistic = c("logit", "glmer"),
+  poisson = c("poisson", "poisson_mixed"), count = c("poisson", "poisson_mixed"),
+  negbin = c("negbin", "negbin_mixed"), negative_binomial = c("negbin", "negbin_mixed"),
+  ordinal = c("ordinal", "ordinal_mixed")
 )
 
 .type_labels <- c(
   lm = "Linear", logit = "Logistic",
-  lmer = "Linear mixed", glmer = "Logistic mixed"
+  lmer = "Linear mixed", glmer = "Logistic mixed",
+  poisson = "Poisson", poisson_mixed = "Poisson mixed",
+  negbin = "Negative binomial", negbin_mixed = "Negative binomial mixed",
+  ordinal = "Ordinal (cumulative logit)", ordinal_mixed = "Ordinal mixed",
+  bayes_linear = "Bayesian linear", bayes_logistic = "Bayesian logistic",
+  bayes_ordinal = "Bayesian ordinal", bayes_poisson = "Bayesian Poisson",
+  bayes_negbin = "Bayesian negative binomial"
 )
 
-# "linear" and "logistic" resolve to the mixed version when a random term is given.
 resolve_type <- function(type, has_random) {
   t <- tolower(type)
-  if (t %in% c("linear", "gaussian")) return(if (has_random) "lmer" else "lm")
-  if (t %in% c("logistic")) return(if (has_random) "glmer" else "logit")
+  if (t %in% names(.type_pairs)) return(.type_pairs[[t]][if (has_random) 2 else 1])
   out <- unname(.type_aliases[t])
   if (is.na(out)) {
-    stop(sprintf(
-      "Unknown model type '%s'. Use one of: linear, logistic, lm, logit, lmer, glmer.",
-      type
-    ), call. = FALSE)
+    stop(sprintf(paste0(
+      "Unknown model type '%s'. Use one of: linear, logistic, poisson, negbin, ordinal ",
+      "(mixed automatically with `random`), or bayes_linear, bayes_logistic, ",
+      "bayes_ordinal, bayes_poisson, bayes_negbin."), type), call. = FALSE)
   }
-  if (out %in% c("lmer", "glmer") && !has_random) {
+  if (is_mixed(out) && !is_bayes(out) && !has_random) {
     stop(sprintf("Model type '%s' needs a `random` term, e.g. random = ~ (1 | id).", type),
          call. = FALSE)
+  }
+  if (!is_mixed(out) && !is_bayes(out) && has_random) {
+    fixed_twin <- names(.type_pairs)[vapply(.type_pairs, function(p) p[1] == out, logical(1))]
+    if (length(fixed_twin)) out <- .type_pairs[[fixed_twin[1]]][2]
   }
   out
 }
 
-is_mixed <- function(type) type %in% c("lmer", "glmer")
-is_logistic <- function(type) type %in% c("logit", "glmer")
+is_bayes <- function(type) startsWith(type, "bayes_")
+is_mixed <- function(type) type %in% c("lmer", "glmer", "poisson_mixed", "negbin_mixed",
+                                       "ordinal_mixed")
+is_logistic <- function(type) type %in% c("logit", "glmer", "bayes_logistic")
+is_count <- function(type) type %in% c("poisson", "poisson_mixed", "negbin", "negbin_mixed",
+                                       "bayes_poisson", "bayes_negbin")
+is_ordinal <- function(type) type %in% c("ordinal", "ordinal_mixed", "bayes_ordinal")
+is_linear <- function(type) type %in% c("lm", "lmer", "bayes_linear")
+
+# Coefficients on a log scale that are reported exponentiated, and their name.
+ratio_name <- function(type) {
+  if (is_logistic(type) || is_ordinal(type)) "OR" else if (is_count(type)) "IRR" else NULL
+}
 
 rhs_text <- function(x) {
   if (is.null(x)) return(NULL)
@@ -45,8 +85,8 @@ rhs_text <- function(x) {
        call. = FALSE)
 }
 
-build_formula <- function(dv, predictors, random) {
-  rhs <- rhs_text(predictors)
+build_formula <- function(dv, predictors, random, extra = NULL) {
+  rhs <- paste(c(rhs_text(predictors), extra), collapse = " + ")
   rnd <- rhs_text(random)
   if (!is.null(rnd)) rhs <- paste(rhs, "+", rnd)
   stats::as.formula(paste(sprintf("`%s`", dv), "~", rhs), env = globalenv())
@@ -57,6 +97,12 @@ fit_one <- function(type, formula, data, fit_args = list()) {
   switch(type,
     lm    = do.call(stats::lm, args),
     logit = do.call(stats::glm, c(args, list(family = stats::binomial()))),
+    # Poisson quasi-ML also suits non-integer skewed outcomes (ratio of means)
+    poisson = suppressWarnings(do.call(stats::glm, c(args, list(family = stats::poisson())))),
+    negbin = {
+      need_pkg("MASS")
+      do.call(MASS::glm.nb, args)
+    },
     lmer  = {
       need_pkg("lme4"); need_pkg("lmerTest")
       do.call(lmerTest::lmer, args)
@@ -64,8 +110,52 @@ fit_one <- function(type, formula, data, fit_args = list()) {
     glmer = {
       need_pkg("lme4")
       do.call(lme4::glmer, c(args, list(family = stats::binomial())))
-    }
+    },
+    poisson_mixed = {
+      need_pkg("lme4")
+      do.call(lme4::glmer, c(args, list(family = stats::poisson())))
+    },
+    negbin_mixed = {
+      need_pkg("glmmTMB")
+      do.call(glmmTMB::glmmTMB, c(args, list(family = glmmTMB::nbinom2())))
+    },
+    ordinal = {
+      need_pkg("ordinal")
+      args$data[[response_name(formula)]] <- as_ordered(args$data[[response_name(formula)]])
+      do.call(ordinal::clm, args)
+    },
+    ordinal_mixed = {
+      need_pkg("ordinal")
+      args$data[[response_name(formula)]] <- as_ordered(args$data[[response_name(formula)]])
+      do.call(ordinal::clmm, args)
+    },
+    fit_bayes(type, args)
   )
+}
+
+fit_bayes <- function(type, args) {
+  need_pkg("brms")
+  fam <- switch(type,
+    bayes_linear = brms::brmsfamily("gaussian"),
+    bayes_logistic = brms::brmsfamily("bernoulli"),
+    bayes_ordinal = brms::brmsfamily("cumulative", "logit"),
+    bayes_poisson = brms::brmsfamily("poisson"),
+    bayes_negbin = brms::brmsfamily("negbinomial"))
+  if (type == "bayes_ordinal") {
+    y <- response_name(args$formula)
+    args$data[[y]] <- as_ordered(args$data[[y]])
+  }
+  defaults <- list(family = fam, refresh = 0, silent = 2, seed = 2026)
+  args <- c(args, defaults[setdiff(names(defaults), names(args))])
+  do.call(brms::brm, args)
+}
+
+response_name <- function(formula) all.vars(formula[[2]])[1]
+
+as_ordered <- function(y) {
+  if (is.ordered(y)) return(y)
+  if (is.factor(y)) return(factor(y, levels = levels(y), ordered = TRUE))
+  factor(y, levels = sort(unique(y)), ordered = TRUE)
 }
 
 need_pkg <- function(pkg) {
@@ -76,6 +166,19 @@ need_pkg <- function(pkg) {
 }
 
 grouping_factors <- function(model) {
-  if (!inherits(model, "merMod")) return(character())
-  names(lme4::getME(model, "flist"))
+  if (inherits(model, "merMod")) return(names(lme4::getME(model, "flist")))
+  if (inherits(model, "clmm")) return(names(model$dims$nlev.gf))
+  if (inherits(model, "brmsfit")) return(names(brms::ngrps(model)))
+  if (inherits(model, "glmmTMB")) return(names(model$modelInfo$reTrms$cond$flist))
+  character()
+}
+
+# Fixed-effects design pieces built from the formula and the analysis data, so
+# every model class (lm to brms) is labelled the same way.
+model_parts <- function(formula, data) {
+  fixed <- if (requireNamespace("lme4", quietly = TRUE)) lme4::nobars(formula) else formula
+  mf <- stats::model.frame(fixed, data)
+  tt <- stats::terms(mf)
+  X <- stats::model.matrix(tt, mf)
+  list(X = X, terms = tt, mf = mf)
 }

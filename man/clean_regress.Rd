@@ -25,6 +25,9 @@ clean_regress(
   clean_labels = TRUE,
   label_case = "sentence",
   intercept = TRUE,
+  baseline = NULL,
+  lin = NULL,
+  contrast_by = NULL,
   fit_args = list()
 )
 }
@@ -32,10 +35,16 @@ clean_regress(
 \item{data}{A data frame.}
 
 \item{dvs}{Named character vector mapping each outcome to a model type, e.g.
-\code{c(trust = "linear", donated = "logistic")}. Types: \code{"linear"},
-\code{"logistic"} (mixed automatically when \code{random} is given), or explicit
-\code{"lm"}, \code{"logit"}, \code{"lmer"}, \code{"glmer"}. An unnamed vector of outcome names
-is allowed when \code{type} is supplied.}
+\code{c(trust = "linear", donated = "logistic", liking = "ordinal")}. Types:
+\code{"linear"}, \code{"logistic"}, \code{"poisson"} (counts, or Poisson quasi-ML for
+skewed non-negative outcomes: ratio of means), \code{"negbin"} (overdispersed
+counts), \code{"ordinal"} (cumulative logit via \code{ordinal::clm}; \code{"polr"} is an
+alias, same model). Each becomes its mixed version when \code{random} is given
+(\code{lmer}, \code{glmer}, \code{glmmTMB} negative binomial, \code{ordinal::clmm}). Bayesian
+versions via brms: \code{"bayes_linear"}, \code{"bayes_logistic"}, \code{"bayes_ordinal"},
+\code{"bayes_poisson"}, \code{"bayes_negbin"} (with or without \code{random}; pass priors,
+chains, iter, etc. in \code{fit_args}). An unnamed vector of outcome names is
+allowed when \code{type} is supplied.}
 
 \item{predictors}{One-sided formula (\code{~ condition + age}) or character
 vector of predictor terms shared by all outcomes.}
@@ -66,7 +75,8 @@ predictor with 3+ levels), or a character vector of factor names.}
 \item{dv_adjust_terms}{Variables whose rows get the across-outcome
 correction. \code{NULL} means every non-intercept row.}
 
-\item{exponentiate}{Report odds ratios for logistic models.}
+\item{exponentiate}{Report ratios: odds ratios (logistic), cumulative odds
+ratios (ordinal), incidence rate ratios (Poisson, negative binomial).}
 
 \item{conf_level}{Confidence level.}
 
@@ -88,6 +98,17 @@ factor (\code{list(condition = c(GainFraming = "Gain frame"))}).}
 
 \item{intercept}{Show the intercept row.}
 
+\item{baseline}{Pre-treatment measure of each outcome, added as a covariate
+centered on the analysis sample (ANCOVA): a named vector
+\code{c(trust = "trust_pre")}, or one column for every outcome.}
+
+\item{lin}{Treatment variable(s) to interact with the centered baseline (the
+Lin, 2013 estimator); treatment rows then estimate the effect at the mean
+baseline.}
+
+\item{contrast_by}{A moderator: pairwise contrasts are computed within each
+of its levels (simple effects), adjusted within each level.}
+
 \item{fit_args}{List of extra arguments passed to every model fitter, e.g.
 \code{list(control = lme4::glmerControl(optimizer = "bobyqa"))}.}
 }
@@ -95,8 +116,9 @@ factor (\code{list(condition = c(GainFraming = "Gain frame"))}).}
 An object of class \code{clean_results}.
 }
 \description{
-Fits one model per dependent variable (linear, logistic, linear mixed, or
-logistic mixed), computes robust or model-based inference, keeps reference
+Fits one model per dependent variable (linear, logistic, Poisson, negative
+binomial, or ordinal; each also as a mixed model or a Bayesian brms model),
+computes robust or model-based inference, keeps reference
 categories as explicit rows, optionally adds pairwise contrasts, and applies
 multiple-comparison corrections within factors and/or across outcomes.
 Render the result with \code{\link[=cr_table]{cr_table()}} (or just print it in a Quarto chunk),

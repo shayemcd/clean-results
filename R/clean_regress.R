@@ -1,7 +1,8 @@
 #' Fit regressions for one or more outcomes and collect publication-ready results
 #'
-#' Fits one model per dependent variable (linear, logistic, linear mixed, or
-#' logistic mixed), computes robust or model-based inference, keeps reference
+#' Fits one model per dependent variable (linear, logistic, Poisson, negative
+#' binomial, or ordinal; each also as a mixed model or a Bayesian brms model),
+#' computes robust or model-based inference, keeps reference
 #' categories as explicit rows, optionally adds pairwise contrasts, and applies
 #' multiple-comparison corrections within factors and/or across outcomes.
 #' Render the result with [cr_table()] (or just print it in a Quarto chunk),
@@ -9,10 +10,16 @@
 #'
 #' @param data A data frame.
 #' @param dvs Named character vector mapping each outcome to a model type, e.g.
-#'   `c(trust = "linear", donated = "logistic")`. Types: `"linear"`,
-#'   `"logistic"` (mixed automatically when `random` is given), or explicit
-#'   `"lm"`, `"logit"`, `"lmer"`, `"glmer"`. An unnamed vector of outcome names
-#'   is allowed when `type` is supplied.
+#'   `c(trust = "linear", donated = "logistic", liking = "ordinal")`. Types:
+#'   `"linear"`, `"logistic"`, `"poisson"` (counts, or Poisson quasi-ML for
+#'   skewed non-negative outcomes: ratio of means), `"negbin"` (overdispersed
+#'   counts), `"ordinal"` (cumulative logit via `ordinal::clm`; `"polr"` is an
+#'   alias, same model). Each becomes its mixed version when `random` is given
+#'   (`lmer`, `glmer`, `glmmTMB` negative binomial, `ordinal::clmm`). Bayesian
+#'   versions via brms: `"bayes_linear"`, `"bayes_logistic"`, `"bayes_ordinal"`,
+#'   `"bayes_poisson"`, `"bayes_negbin"` (with or without `random`; pass priors,
+#'   chains, iter, etc. in `fit_args`). An unnamed vector of outcome names is
+#'   allowed when `type` is supplied.
 #' @param predictors One-sided formula (`~ condition + age`) or character
 #'   vector of predictor terms shared by all outcomes.
 #' @param random Random-effects term(s) for mixed models, e.g. `~ (1 | id)`.
@@ -32,7 +39,8 @@
 #'   [stats::p.adjust()] method; `"none"` by default.
 #' @param dv_adjust_terms Variables whose rows get the across-outcome
 #'   correction. `NULL` means every non-intercept row.
-#' @param exponentiate Report odds ratios for logistic models.
+#' @param exponentiate Report ratios: odds ratios (logistic), cumulative odds
+#'   ratios (ordinal), incidence rate ratios (Poisson, negative binomial).
 #' @param conf_level Confidence level.
 #' @param labels Named vector of display labels for predictors, e.g.
 #'   `c(condition = "Framing condition")`. Unlisted names are cleaned
@@ -46,6 +54,14 @@
 #'   [clean_label()].
 #' @param label_case Case for cleaned labels: `"sentence"`, `"title"`, or `"asis"`.
 #' @param intercept Show the intercept row.
+#' @param baseline Pre-treatment measure of each outcome, added as a covariate
+#'   centered on the analysis sample (ANCOVA): a named vector
+#'   `c(trust = "trust_pre")`, or one column for every outcome.
+#' @param lin Treatment variable(s) to interact with the centered baseline (the
+#'   Lin, 2013 estimator); treatment rows then estimate the effect at the mean
+#'   baseline.
+#' @param contrast_by A moderator: pairwise contrasts are computed within each
+#'   of its levels (simple effects), adjusted within each level.
 #' @param fit_args List of extra arguments passed to every model fitter, e.g.
 #'   `list(control = lme4::glmerControl(optimizer = "bobyqa"))`.
 #'
@@ -71,6 +87,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
                           exponentiate = TRUE, conf_level = 0.95,
                           labels = NULL, level_labels = NULL, dv_labels = NULL,
                           clean_labels = TRUE, label_case = "sentence", intercept = TRUE,
+                          baseline = NULL, lin = NULL, contrast_by = NULL,
                           fit_args = list()) {
   se <- match.arg(se)
   if (!is.data.frame(data)) stop("`data` must be a data frame.", call. = FALSE)
@@ -83,21 +100,45 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     stop(sprintf("Cluster column '%s' not found in `data`.", cluster), call. = FALSE)
   }
 
+  if (length(lin)) {
+    if (is.null(baseline)) stop("`lin` needs a `baseline` to interact with.", call. = FALSE)
+    if (!is.null(predictors)) {
+      pv <- all.vars(stats::as.formula(paste("~", rhs_text(predictors))))
+      if (!all(lin %in% pv)) {
+        stop(sprintf("`lin` variable(s) not among the predictors: %s",
+                     paste(setdiff(lin, pv), collapse = ", ")), call. = FALSE)
+      }
+    }
+  }
+  if (!is.null(baseline)) {
+    if (is.null(names(baseline))) baseline <- stats::setNames(rep(baseline, length(dvs)), names(dvs))
+    if (!".baseline" %in% names(labels)) labels <- c(labels, .baseline = "Baseline (centered)")
+  }
   lab_fun <- make_labeller(labels, level_labels, clean_labels, label_case)
   models <- list(); stats_list <- list(); est_list <- list(); meta <- list()
   for (dv in names(dvs)) {
-    f <- if (!is.null(formulas[[dv]])) formulas[[dv]] else build_formula(dv, predictors, random)
+    base_col <- if (!is.null(baseline)) unname(baseline[dv]) else NA_character_
+    has_base <- !is.na(base_col)
+    extra <- if (has_base) c(".baseline", if (length(lin)) paste0(lin, ":.baseline")) else NULL
+    f <- if (!is.null(formulas[[dv]])) {
+      if (has_base) stats::update(formulas[[dv]], stats::as.formula(
+        paste(". ~ . +", paste(extra, collapse = " + ")))) else formulas[[dv]]
+    } else build_formula(dv, predictors, random, extra)
     has_random <- any(grepl("|", deparse(f, width.cutoff = 500L), fixed = TRUE))
     mtype <- resolve_type(dvs[[dv]], has_random)
 
-    vars <- unique(c(all.vars(f), cluster))
+    vars <- unique(c(setdiff(all.vars(f), ".baseline"), cluster, if (has_base) base_col))
     missing_vars <- setdiff(vars, names(data))
     if (length(missing_vars)) {
       stop(sprintf("Variables not found in `data`: %s", paste(missing_vars, collapse = ", ")),
            call. = FALSE)
     }
     d_i <- data[stats::complete.cases(data[vars]), , drop = FALSE]
+    # Baseline centered in each model's own analysis sample, so the treatment
+    # coefficients are effects at the mean baseline (ANCOVA; Lin, 2013 with `lin`)
+    if (has_base) d_i$.baseline <- d_i[[base_col]] - mean(d_i[[base_col]])
     m <- fit_one(mtype, f, d_i, fit_args)
+    parts <- model_parts(f, d_i)
 
     cluster_name <- cluster
     if (is.null(cluster_name) && is_mixed(mtype)) cluster_name <- grouping_factors(m)[1]
@@ -105,16 +146,26 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
 
     V <- model_vcov(m, mtype, se, cluster_vec)
     coefs <- infer_coefs(m, mtype, se, V, conf_level)
-    map <- term_map(m, lab_fun = lab_fun, intercept = intercept)
+    map <- term_map(parts, lab_fun = lab_fun, intercept = intercept && !is_ordinal(mtype))
     fixed <- merge(map, coefs, by = "term", all.x = TRUE, sort = FALSE)
     fixed <- fixed[match(map$key, fixed$key), , drop = FALSE]
     fixed$section <- "fixed"
-    exp_i <- exponentiate && is_logistic(mtype)
+    fixed$by_level <- NA_character_
+    exp_i <- exponentiate && !is.null(ratio_name(mtype))
     if (exp_i) fixed <- exponentiate_rows(fixed)
 
-    cvars <- contrast_vars(contrasts, m)
+    model_vars <- attr(parts$terms, "term.labels")
+    if (!is.null(contrast_by) && !contrast_by %in% model_vars) {
+      stop(sprintf("`contrast_by` = '%s' must be a predictor in the model for '%s'.",
+                   contrast_by, dv), call. = FALSE)
+    }
+    if (length(lin) && !all(lin %in% model_vars)) {
+      stop(sprintf("`lin` variable(s) not among the predictors: %s",
+                   paste(setdiff(lin, model_vars), collapse = ", ")), call. = FALSE)
+    }
+    cvars <- contrast_vars(contrasts, parts)
     ctr <- pairwise_rows(m, mtype, d_i, cvars, V, se, contrast_adjust, conf_level,
-                         exp_i, lab_fun)
+                         exp_i, lab_fun, mf = parts$mf, by = contrast_by)
     est <- rbind(fixed[, names(ctr %||% fixed)], ctr)
     est$log_scale <- exp_i
     est$ci_level <- ci_levels(est, conf_level)
@@ -124,13 +175,15 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     est_list[[dv]] <- est
 
     models[[dv]] <- m
-    stats_list[[dv]] <- fit_stats(m, mtype, lab_fun)
+    stats_list[[dv]] <- fit_stats(m, mtype, lab_fun, parts)
     meta[[dv]] <- list(
-      type = mtype, exponentiate = exp_i, cluster = cluster_name,
+      type = mtype, exponentiate = exp_i, est_name = if (exp_i) ratio_name(mtype) else "b",
+      bayes = is_bayes(mtype), baseline = if (has_base) base_col else NULL,
+      cluster = if (robust_available(mtype) && se == "robust") cluster_name else NULL,
       se_text = se_method_text(mtype, se,
                                if (!is.null(cluster_name)) lab_fun$var(cluster_name)),
-      robust_fallback = se == "robust" && !robust_available(mtype),
-      contrast_vars = cvars, n = stats::nobs(m)
+      robust_fallback = se == "robust" && !robust_available(mtype) && !is_bayes(mtype),
+      contrast_vars = cvars, contrast_by = contrast_by, n = nrow(parts$mf)
     )
   }
 
@@ -150,7 +203,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     settings = list(
       dvs = names(dvs), dv_labels = dv_lab, se = se, conf_level = conf_level,
       contrast_adjust = contrast_adjust, dv_adjust = dv_adjust,
-      dv_adjust_terms = dv_adjust_terms,
+      dv_adjust_terms = dv_adjust_terms, lin = lin,
       var_labels = vapply(unique(c(dv_adjust_terms, character())), lab_fun$var, "")
     )
   ), class = "clean_results")
@@ -168,10 +221,10 @@ normalize_dvs <- function(dvs, type) {
   dvs
 }
 
-contrast_vars <- function(contrasts, model) {
+contrast_vars <- function(contrasts, parts) {
   if (is.null(contrasts) || isFALSE(contrasts)) return(character())
-  mf <- stats::model.frame(model)
-  labs <- attr(fixed_terms(model), "term.labels")
+  mf <- parts$mf
+  labs <- attr(parts$terms, "term.labels")
   if (isTRUE(contrasts)) {
     return(labs[vapply(labs, function(l) {
       l %in% names(mf) && length(factor_levels(mf[[l]])) >= 3
@@ -215,7 +268,7 @@ adjust_across_dvs <- function(est, method, terms, n_dv) {
 # per-comparison level is read back from the interval itself.
 ci_levels <- function(est, conf_level) {
   lev <- rep(conf_level, nrow(est))
-  ctr <- which(est$section == "contrast" & est$row_type == "level")
+  ctr <- which(est$section == "contrast" & est$row_type == "level" & is.na(est$pd))
   if (length(ctr)) {
     q <- ci_q(est[ctr, , drop = FALSE])
     df <- ifelse(is.finite(est$df[ctr]), est$df[ctr], Inf)

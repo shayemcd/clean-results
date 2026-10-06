@@ -73,6 +73,7 @@ default_stats <- function(kind, style) {
     return(if (style == "econ") c("est", "se", "p") else c("est", "ci", "p"))
   }
   switch(kind, cor = c("est", "ci", "p"), ttest = c("test", "p", "es"),
+         equivalence = c("est", "ci", "test", "p"),
          c("test", "p", "es"))
 }
 
@@ -81,7 +82,8 @@ stats_text <- function(r, stats = NULL, format = "markdown", style = "apa", digi
                        p_digits = 3) {
   f <- text_fmt(format, style)
   stats <- stats %||% default_stats(r$kind, f$style)
-  ci_lab <- sprintf("%s%s CI", format(round(100 * r$conf_level, 1)), f$pct)
+  ci_lab <- sprintf("%s%s %s", format(round(100 * r$conf_level, 1)), f$pct,
+                    if (identical(r$interval, "CrI")) "CrI" else "CI")
   est_name <- r$est_name %||% NA
   piece <- function(s) {
     switch(s,
@@ -107,7 +109,9 @@ stats_text <- function(r, stats = NULL, format = "markdown", style = "apa", digi
           if (is.finite(r$df)) sprintf("(%s)", df_text(r$df)) else "")
         sprintf("%s%s = %s", sym_text(r$stat_name, f), dfs, fmt_num(r$statistic, digits))
       },
-      p = if (!is.na(r$p.value)) p_text(r$p.value, f, p_digits),
+      p = if (!is.na(r$p.value)) p_text(r$p.value, f, p_digits) else if (!is.na(r$pd %||% NA)) {
+        sprintf("%s = %s%s", f$it("pd"), formatC(100 * r$pd, format = "f", digits = 1), f$pct)
+      },
       es = {
         if (is.na(r$es)) return(NULL)
         s <- sprintf("%s = %s", sym_text(r$es_name, f), num_text(r$es, r$es_name, f, digits))
@@ -162,8 +166,18 @@ cr_inline <- function(x, dv, variable = NULL, level = NULL, stats = NULL,
 
 # Direction and significance --------------------------------------------------
 
+# Significant: p < alpha, or for Bayesian rows a credible interval that
+# excludes the null (0, or 1 for ratios).
+row_sig <- function(r, alpha = 0.05) {
+  if (identical(r$interval, "CrI")) {
+    null <- if (r$est_name %in% c("OR", "IRR")) 1 else 0
+    return(!is.na(r$conf.low) && (r$conf.low > null || r$conf.high < null))
+  }
+  !is.na(r$p.value) && r$p.value < alpha
+}
+
 row_sign <- function(r) {
-  null <- if (identical(r$est_name, "OR")) 1 else 0
+  null <- if (r$est_name %in% c("OR", "IRR")) 1 else 0
   v <- if (!is.na(r$estimate)) r$estimate else if (!is.na(r$es)) r$es + null else r$statistic + null
   if (is.na(v) || v == null) 0L else if (v > null) 1L else -1L
 }
@@ -195,7 +209,7 @@ cr_direction <- function(x, dv, variable = NULL, level = NULL,
 cr_sig <- function(x, dv, variable = NULL, level = NULL, words = c("was", "was not"),
                    alpha = 0.05, subgroup = NULL) {
   r <- cr_find(x, dv, variable, level, subgroup)
-  if (!is.na(r$p.value) && r$p.value < alpha) words[1] else words[2]
+  if (row_sig(r, alpha)) words[1] else words[2]
 }
 
 #' Stop rendering when a claim in your text stops holding
@@ -244,12 +258,16 @@ check_parts <- function(r, sign, sig, alpha) {
   got <- sprintf("got %s", stats_text(r, c("est", "p"), "plain"))
   if (is.na(r$estimate)) got <- sprintf("got %s", stats_text(r, c("test", "p", "es"), "plain"))
   s <- row_sign(r)
-  is_sig <- !is.na(r$p.value) && r$p.value < alpha
+  is_sig <- row_sig(r, alpha)
   bad <- c(
     if (!is.null(sign) && sign == "+" && s <= 0) "expected a positive effect",
     if (!is.null(sign) && sign == "-" && s >= 0) "expected a negative effect",
-    if (isTRUE(sig) && !is_sig) sprintf("expected p < %s", format(alpha)),
-    if (isFALSE(sig) && is_sig) sprintf("expected p >= %s", format(alpha))
+    if (isTRUE(sig) && !is_sig) {
+      if (identical(r$interval, "CrI")) "expected the CrI to exclude the null" else sprintf("expected p < %s", format(alpha))
+    },
+    if (isFALSE(sig) && is_sig) {
+      if (identical(r$interval, "CrI")) "expected the CrI to include the null" else sprintf("expected p >= %s", format(alpha))
+    }
   )
   if (!length(bad)) NULL else paste0(paste(bad, collapse = " and "), "; ", got)
 }
@@ -260,6 +278,11 @@ expect_check <- function(r, expect, alpha) {
     `+` = check_parts(r, "+", TRUE, alpha),
     `-` = check_parts(r, "-", TRUE, alpha),
     ns = check_parts(r, NULL, FALSE, alpha),
+    equiv = {
+      if (!identical(r$kind, "equivalence")) {
+        "expect = \"equiv\" needs a cr_equivalence() result"
+      } else check_parts(r, NULL, TRUE, alpha)
+    },
     NULL)
 }
 

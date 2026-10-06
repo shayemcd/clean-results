@@ -18,7 +18,8 @@
 #' @param alpha Significance threshold for `expect`.
 #' @return A `cr_h` object.
 #' @export
-cr_h <- function(source, dv, variable = NULL, level = NULL, expect = c("any", "+", "-", "ns"),
+cr_h <- function(source, dv, variable = NULL, level = NULL,
+                 expect = c("any", "+", "-", "ns", "equiv"),
                  robustness = NULL, subgroup = NULL, alpha = 0.05) {
   expect <- match.arg(expect)
   src_name <- paste(deparse(substitute(source)), collapse = "")
