@@ -90,7 +90,7 @@ cr_tidy <- function(x) {
                                     "conf.low", "conf.high", "p.within", "p.value",
                                     "dv_adjusted")]
   e$model_type <- vapply(e$dv, function(d) x$meta[[d]]$type, "")
-  e$estimate_type <- vapply(e$dv, function(d) if (x$meta[[d]]$exponentiate) "OR" else "b", "")
+  e$estimate_type <- vapply(e$dv, function(d) est_symbol(x$meta[[d]]), "")
   rownames(e) <- NULL
   e
 }

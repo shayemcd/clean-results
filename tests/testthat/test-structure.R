@@ -69,7 +69,7 @@ test_that("informative errors", {
   d <- make_data()
   expect_error(clean_regress(d, dvs = "score", predictors = ~ condition), "Name each outcome")
   expect_error(clean_regress(d, dvs = c(score = "lmer"), predictors = ~ condition), "random")
-  expect_error(clean_regress(d, dvs = c(score = "poisson"), predictors = ~ condition), "Unknown model type")
+  expect_error(clean_regress(d, dvs = c(score = "tobit"), predictors = ~ condition), "Unknown model type")
   expect_error(clean_regress(d, dvs = c(nope = "lm"), predictors = ~ condition), "not found")
 })
 

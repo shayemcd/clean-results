@@ -25,6 +25,10 @@ fmt_stars <- function(p, cuts = c(0.05, 0.01, 0.001)) {
   s
 }
 
+fmt_pd <- function(pd) ifelse(is.na(pd), "", sprintf("%s%%", formatC(100 * pd, format = "f", digits = 1)))
+
+est_symbol <- function(meta) meta$est_name %||% (if (isTRUE(meta$exponentiate)) "OR" else "b")
+
 fmt_ci <- function(lo, hi, digits = 2) {
   ifelse(is.na(lo), "", sprintf("[%s, %s]", fmt_num(lo, digits), fmt_num(hi, digits)))
 }
@@ -85,7 +89,9 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
 
   emit_section <- function(sec) {
     sub <- est[est$section == sec, , drop = FALSE]
-    for (k in unique(sub$key)) {
+    keys <- unique(sub$key)
+    keys <- c(intersect("(Intercept)", keys), setdiff(keys, "(Intercept)"))
+    for (k in keys) {
       r0 <- sub[sub$key == k, , drop = FALSE][1, ]
       indent <- if (r0$row_type %in% c("level", "ref")) 1L else 0L
       cells <- rep("", ncell); below <- rep("", ncell)
@@ -104,7 +110,9 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
         vals <- c(est = e,
                   unc = if (spec$unc_col) unc_txt(r),
                   es = if (spec$effect_size) fmt_num(r$es, digits),
-                  p = if (spec$p_col) fmt_p(r$p.value, p_digits))
+                  p = if (spec$p_col) {
+                    if (is.na(r$p.value) && !is.na(r$pd)) fmt_pd(r$pd) else fmt_p(r$p.value, p_digits)
+                  })
         cells[b] <- vals[spec$cols]
         if (spec$layout == "stacked") below[b[1]] <- unc_txt(r)
       }
@@ -141,14 +149,15 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
   if (!only && random) emit_stats("random", "Random effects")
   if (!only && fit) emit_stats("fit", "Model fit")
 
-  ci_lab <- sprintf("%g%% CI", 100 * x$settings$conf_level)
-  unc_lab <- switch(spec$uncertainty, se = "SE", ci = ci_lab, none = "")
   sub_head <- unlist(lapply(dvs, function(d) {
-    e <- if (x$meta[[d]]$exponentiate) "OR" else if (only) "Diff." else "b"
+    bayes <- isTRUE(x$meta[[d]]$bayes)
+    ci_lab <- sprintf("%g%% %s", 100 * x$settings$conf_level, if (bayes) "CrI" else "CI")
+    unc_lab <- switch(spec$uncertainty, se = if (bayes) "MAD" else "SE", ci = ci_lab, none = "")
+    e <- if (x$meta[[d]]$exponentiate) est_symbol(x$meta[[d]]) else if (only) "Diff." else "b"
     if (spec$layout == "inline" && spec$uncertainty != "none") {
-      e <- paste(e, if (spec$uncertainty == "se") "(SE)" else sprintf("[%s]", ci_lab))
+      e <- paste(e, if (spec$uncertainty == "se") sprintf("(%s)", unc_lab) else sprintf("[%s]", ci_lab))
     }
-    c(est = e, unc = unc_lab, es = "d", p = "p")[spec$cols]
+    c(est = e, unc = unc_lab, es = "d", p = if (bayes) "pd" else "p")[spec$cols]
   }), use.names = FALSE)
   mtype <- vapply(dvs, function(d) .type_labels[[x$meta[[d]]$type]], "")
 
@@ -171,42 +180,65 @@ table_notes <- function(x, spec, note = NULL) {
   show_contrasts <- spec$contrasts != "exclude" && any(x$estimates$section == "contrast")
   out <- character()
 
-  any_lin <- any(!vapply(meta, `[[`, logical(1), "exponentiate"))
-  any_or <- any(vapply(meta, `[[`, logical(1), "exponentiate"))
+  syms <- vapply(meta, est_symbol, "")
+  types <- vapply(meta, `[[`, "", "type")
+  bayes <- vapply(meta, function(m) isTRUE(m$bayes), logical(1))
+  any_lin <- any(syms == "b")
+  any_or <- any(syms != "b")
+  or_logit <- any(syms == "OR" & !is_ordinal(types))
+  or_ord <- any(syms == "OR" & is_ordinal(types))
+  irr <- any(syms == "IRR")
   abbr <- c(
     if (any_lin) {
       if (only) "Diff. = difference in estimated marginal means" else "b = unstandardized coefficient"
     },
-    if (any_or) {
-      if (only) "OR = ratio of odds" else "OR = odds ratio"
+    if (or_logit) if (only) "OR = ratio of odds" else "OR = odds ratio",
+    if (or_ord) "OR (ordinal models) = cumulative odds ratio (proportional odds)",
+    if (irr) "IRR = incidence rate ratio (ratio of means)",
+    if (spec$uncertainty == "se") {
+      c(if (any(!bayes)) "SE = standard error", if (any(bayes)) "MAD = posterior median absolute deviation")
     },
-    if (spec$uncertainty == "se") "SE = standard error",
-    if (spec$uncertainty == "ci") "CI = confidence interval"
+    if (spec$uncertainty == "ci") {
+      c(if (any(!bayes)) "CI = confidence interval", if (any(bayes)) "CrI = credible interval")
+    },
+    if (any(bayes) && spec$p != "none") "pd = probability of direction (share of the posterior with the estimate's sign)"
   )
   out <- c(out, paste0(paste(abbr, collapse = "; "), "."))
 
-  se_txt <- vapply(meta, `[[`, character(1), "se_text")
+  se_txt <- vapply(meta, `[[`, character(1), "se_text")[!bayes]
   what <- c(if (spec$uncertainty == "se") "SEs", if (spec$uncertainty == "ci") "CIs",
             if (spec$p != "none") "p-values")
   what <- if (length(what)) paste(what, collapse = " and ") else "Inference"
-  if (length(unique(se_txt)) == 1) {
-    out <- c(out, sprintf("%s use %s.", what, se_txt[1]))
-  } else {
+  if (length(se_txt) && length(unique(se_txt)) == 1) {
+    out <- c(out, sprintf("%s use %s%s.", what, se_txt[1],
+                          if (any(bayes)) sprintf(" (%s)", paste(lab[names(se_txt)], collapse = ", ")) else ""))
+  } else if (length(se_txt)) {
     parts <- vapply(unique(se_txt), function(t) {
       sprintf("%s (%s)", t, paste(lab[names(se_txt)[se_txt == t]], collapse = ", "))
     }, character(1))
     out <- c(out, sprintf("%s use %s.", what, paste(parts, collapse = "; ")))
   }
-  if (any(vapply(meta, `[[`, logical(1), "robust_fallback"))) {
-    out <- c(out, "Cluster-robust SEs are not available for logistic mixed models, so those models use model-based Wald SEs.")
+  if (any(bayes)) {
+    out <- c(out, sprintf(
+      "%s report%s posterior medians with %g%% equal-tailed credible intervals (brms) and are not adjusted for multiple comparisons.",
+      if (all(bayes)) "All models" else sprintf("Bayesian models (%s)", paste(lab[names(meta)[bayes]], collapse = ", ")),
+      "", 100 * x$settings$conf_level))
   }
+  fb <- vapply(meta, `[[`, logical(1), "robust_fallback")
+  if (any(fb)) {
+    fb_types <- unique(tolower(.type_labels[types[fb]]))
+    out <- c(out, sprintf(
+      "Robust SEs are not available for %s models, so %s model-based Wald SEs.",
+      paste(fb_types, collapse = ", "), if (sum(fb) == 1) "that model uses" else "those models use"))
+  }
+
   if (spec$layout != "columns" && spec$uncertainty != "none") {
     out <- c(out, if (spec$uncertainty == "se") {
-      if (any_or) "Standard errors in parentheses (delta-method SEs for odds ratios)."
+      if (any_or) "Standard errors in parentheses (delta-method SEs for ratios)."
       else "Standard errors in parentheses."
     } else sprintf("%g%% CIs in brackets.", 100 * x$settings$conf_level))
   } else if (spec$uncertainty == "se" && any_or) {
-    out <- c(out, "SEs for odds ratios are delta-method SEs.")
+    out <- c(out, "SEs for ratios are delta-method SEs.")
   }
   if (!only && any(x$estimates$is_ref, na.rm = TRUE)) {
     out <- c(out, "(ref.) marks the reference category for each factor.")
@@ -220,9 +252,18 @@ table_notes <- function(x, spec, note = NULL) {
       sprintf("are %s-adjusted and their CIs %s-adjusted within each factor",
               adjust_name(adj), adjust_name(ci_adj))
     }
-    or_txt <- if (any_or) " (ratios of odds for logistic models)" else ""
+    or_txt <- if (any_or) " (ratios for logistic, ordinal, and count models)" else ""
     lead <- if (only) "Contrasts" else "Pairwise contrasts"
-    out <- c(out, sprintf(
+    by <- unique(unlist(lapply(meta, `[[`, "contrast_by")))
+    if (length(by)) {
+      adj_txt <- sub("within each factor", "within each factor and moderator level", adj_txt)
+      lead <- paste(lead, sprintf("within each level of %s",
+                                  paste(vapply(by, function(b) lc_first(clean_label(b)), ""),
+                                        collapse = ", ")))
+    }
+    out <- c(out, if (all(bayes)) {
+      sprintf("%s compare estimated marginal means averaged over other predictors%s.", lead, or_txt)
+    } else sprintf(
       "%s compare estimated marginal means averaged over other predictors%s; their p-values %s.",
       lead, or_txt, adj_txt))
   }
@@ -235,8 +276,8 @@ table_notes <- function(x, spec, note = NULL) {
   }
   if (spec$effect_size && any(!is.na(x$estimates$es))) {
     out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
-                        "within-group SD of the outcome (linear models) or the total SD, residual",
-                        "plus random-intercept variance (linear mixed models)."))
+                        "within-group SD of the outcome (linear models) or the total SD of one",
+                        "observation, residual plus random-effect variance (linear mixed models)."))
   }
   if (spec$stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
   c(paste("Note.", paste(out, collapse = " ")), note)

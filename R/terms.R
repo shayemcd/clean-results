@@ -3,11 +3,6 @@
 # Returns one row per displayed line of the fixed-effects block, including a
 # header row and a reference-level row for every treatment-coded factor.
 
-fixed_terms <- function(model) {
-  tt <- if (inherits(model, "merMod")) stats::terms(model, fixed.only = TRUE) else stats::terms(model)
-  tt
-}
-
 factor_levels <- function(x) {
   if (is.factor(x)) return(levels(x))
   if (is.logical(x)) return(c("FALSE", "TRUE"))
@@ -15,13 +10,13 @@ factor_levels <- function(x) {
   NULL
 }
 
-term_map <- function(model, lab_fun = make_labeller(), intercept = TRUE) {
-  X <- stats::model.matrix(model)
+term_map <- function(parts, lab_fun = make_labeller(), intercept = TRUE) {
+  X <- parts$X
   assign <- attr(X, "assign")
   cn <- colnames(X)
-  tt <- fixed_terms(model)
+  tt <- parts$terms
   labs <- attr(tt, "term.labels")
-  mf <- stats::model.frame(model)
+  mf <- parts$mf
   rows <- list()
   add <- function(...) rows[[length(rows) + 1]] <<- data.frame(..., stringsAsFactors = FALSE)
 

@@ -42,10 +42,40 @@ res <- clean_regress(
 res                          # console preview (APA style)
 ```
 
-**Model types:** `"linear"` and `"logistic"` become mixed models automatically
-when you give `random`. You can also name the type explicitly with `"lm"`,
-`"logit"`, `"lmer"` or `"glmer"`. Use `formulas` to give one outcome different
-predictors.
+**Model types.** `"linear"`, `"logistic"`, `"poisson"`, `"negbin"`, and
+`"ordinal"` become mixed models automatically when you give `random`:
+
+| Type | No `random` | With `random` | Reported as |
+|---|---|---|---|
+| `"linear"` | `lm` | `lmerTest::lmer` | *b* |
+| `"logistic"` | `glm` binomial | `lme4::glmer` | OR |
+| `"poisson"` | `glm` Poisson (also Poisson quasi-ML for skewed non-negative outcomes such as miles driven) | `glmer` Poisson | IRR (ratio of means) |
+| `"negbin"` | `MASS::glm.nb` | `glmmTMB` nbinom2 | IRR |
+| `"ordinal"` (alias `"polr"`) | `ordinal::clm` | `ordinal::clmm` | cumulative OR |
+| `"bayes_linear"`, `"bayes_logistic"`, `"bayes_ordinal"`, `"bayes_poisson"`, `"bayes_negbin"` | `brms::brm` | `brms::brm` | posterior median, 95% CrI, *pd* |
+
+`"polr"` fits the same proportional-odds model as `MASS::polr`, through
+`ordinal::clm` because it supports robust SEs and mixed versions. Use
+`formulas` to give one outcome different predictors. Bayesian models take
+priors and sampler settings through `fit_args`, e.g.
+`fit_args = list(prior = brms::prior(normal(0, 1), class = "b"), chains = 4, iter = 4000)`.
+
+### Baseline adjustment, simple effects, equivalence
+
+```r
+clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition,
+              baseline = c(trust = "trust_pre"))        # ANCOVA, baseline centered
+clean_regress(..., baseline = c(trust = "trust_pre"), lin = "condition")  # Lin (2013)
+
+clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition * ideology,
+              contrasts = "condition", contrast_by = "ideology")  # simple effects
+
+eq <- cr_equivalence(res, bounds = 0.2, dv = "trust", variable = "condition")  # TOST
+cr_equivalence(res, bounds = c(0.8, 1.25), dv = "shared", variable = "condition")  # ratios
+cr_equivalence(cr_ttest(d, "trust", "condition"), bounds = 0.3, scale = "d")       # d units
+cr_report(eq)
+cr_h(eq, "trust", "condition", "Gain", expect = "equiv")   # in a hypothesis map
+```
 
 ## Table options
 
@@ -201,7 +231,10 @@ random slopes included.
 | lm | HC3; CR2 + Satterthwaite df if `cluster` is set | OLS SEs |
 | logit | HC3 (z); CR2 if `cluster` is set | Wald z |
 | lmer | CR2 clustered on the first grouping factor (or `cluster`), Satterthwaite df | Satterthwaite (lmerTest) |
-| glmer | **Model-based Wald z.** clubSandwich doesn't support glmer, and the table note says so | Wald z |
+| Poisson, negative binomial | HC3 (z); CR2 if `cluster` is set | Wald z |
+| ordinal (clm) | sandwich SEs; cluster-robust if `cluster` is set | Wald z |
+| glmer, Poisson/negbin/ordinal mixed | **Model-based Wald z.** No small-sample cluster-robust estimator exists for these, and the table note says so | Wald z |
+| Bayesian (brms) | Posterior median, MAD, equal-tailed 95% credible interval, probability of direction (*pd*); not adjusted for multiple comparisons | same |
 
 - **Logistic models** report odds ratios. CIs are exponentiated from the
   log-odds scale. In the SE style, SEs are delta-method SEs.

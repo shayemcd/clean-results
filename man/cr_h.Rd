@@ -9,7 +9,7 @@ cr_h(
   dv,
   variable = NULL,
   level = NULL,
-  expect = c("any", "+", "-", "ns"),
+  expect = c("any", "+", "-", "ns", "equiv"),
   robustness = NULL,
   subgroup = NULL,
   alpha = 0.05

@@ -10,13 +10,13 @@ row_cols <- c(
   "is_ref", "est_name", "estimate", "std.error", "stat_name", "statistic", "df",
   "df2", "conf.low", "conf.high", "p.value", "p.within", "adjustment",
   "es_name", "es", "es.low", "es.high", "n", "m1", "sd1", "n1", "m2", "sd2", "n2",
-  "conf_level"
+  "conf_level", "pd", "interval"
 )
 
 empty_rows <- function(n = 0) {
   chr <- c("id", "kind", "model_type", "dv", "dv_label", "section", "variable",
            "variable_label", "level", "level_label", "group1", "group2", "subgroup",
-           "est_name", "stat_name", "adjustment", "es_name")
+           "est_name", "stat_name", "adjustment", "es_name", "interval")
   out <- lapply(row_cols, function(cl) {
     if (cl %in% chr) rep(NA_character_, n) else if (cl == "is_ref") rep(FALSE, n)
     else rep(NA_real_, n)
@@ -75,12 +75,16 @@ cr_rows.clean_results <- function(x, ...) {
         r$group2[i] <- unname(ref_lab[keep$variable[i]])
       }
     }
-    r$est_name <- if (meta$exponentiate) "OR" else "b"
+    r$est_name <- est_symbol(meta)
     r$estimate <- keep$estimate
     r$std.error <- keep$std.error
     r$statistic <- keep$statistic
     r$df <- keep$df
-    r$stat_name <- ifelse(is.finite(keep$df), "t", "z")
+    r$stat_name <- ifelse(is.na(keep$statistic), NA_character_,
+                          ifelse(is.finite(keep$df), "t", "z"))
+    r$pd <- if ("pd" %in% names(keep)) keep$pd else NA_real_
+    r$interval <- if (isTRUE(meta$bayes)) "CrI" else "CI"
+    if ("by_level" %in% names(keep)) r$subgroup <- keep$by_level
     r$conf.low <- keep$conf.low
     r$conf.high <- keep$conf.high
     r$p.value <- keep$p.value

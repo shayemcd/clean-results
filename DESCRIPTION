@@ -29,5 +29,11 @@ Suggests:
     lmerTest,
     testthat (>= 3.0.0),
     rmarkdown,
-    effectsize
+    effectsize,
+    MASS,
+    ordinal,
+    glmmTMB,
+    brms,
+    bayestestR,
+    rstan
 Config/testthat/edition: 3

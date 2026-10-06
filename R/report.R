@@ -37,13 +37,15 @@ row_sentence <- function(r, stats = NULL, format = "markdown", style = "apa", al
   f <- text_fmt(format, style)
   e <- f$esc
   st <- stats_text(r, stats, format, style, digits, p_digits)
-  sig <- !is.na(r$p.value) && r$p.value < alpha
+  sig <- row_sig(r, alpha)
   s <- row_sign(r)
   hl <- if (s > 0) "higher" else "lower"
   dv <- e(lc_first(r$dv_label))
   g1 <- e(r$group1 %||% NA); g2 <- e(r$group2 %||% NA)
   sg <- if (!is.na(r$subgroup)) sprintf(" (%s)", e(r$subgroup)) else ""
-  odds <- identical(r$est_name, "OR")
+  # "odds of" wording only for binary outcomes; ordinal and count ratios read
+  # as higher/lower values of the outcome itself
+  odds <- identical(r$est_name, "OR") && !is_ordinal(r$model_type %||% "")
   body <- switch(r$kind,
     regression = {
       if (!is.na(r$level)) {
@@ -99,6 +101,21 @@ row_sentence <- function(r, stats = NULL, format = "markdown", style = "apa", al
                 e(lc_first(r$variable_label)))
       }
     },
+    equivalence = {
+      what <- if (!is.na(r$level)) {
+        sprintf("The difference in %s between %s and %s", dv, g1, g2)
+      } else {
+        sprintf("The association between %s and %s", e(lc_first(r$variable_label)), dv)
+      }
+      b <- if (isTRUE(all.equal(-r$m1, r$m2))) {
+        sprintf("\u00b1%s", fmt_num(r$m2, digits))
+      } else sprintf("[%s, %s]", fmt_num(r$m1, digits), fmt_num(r$m2, digits))
+      if (grepl("d units", r$adjustment %||% "", fixed = TRUE)) b <- paste(b, "(in d units)")
+      sprintf("%s%s %s within equivalence bounds of %s (TOST)", what, sg,
+              if (sig) "was statistically equivalent to no effect" else
+                "could not be shown to be equivalent to no effect",
+              b)
+    },
     anova = sprintf("%s%s %s across %s", uc_first(dv), sg,
                     if (sig) "differed significantly" else "did not differ significantly",
                     e(lc_first(r$variable_label))),
@@ -110,6 +127,11 @@ row_sentence <- function(r, stats = NULL, format = "markdown", style = "apa", al
     },
     stop("Unknown result kind.", call. = FALSE)
   )
+  if (r$kind == "regression" && !is.na(r$subgroup)) body <- paste0(body, sg)
+  if (identical(r$interval, "CrI")) {
+    body <- sub("did not differ significantly", "did not credibly differ", body, fixed = TRUE)
+    body <- sub("was not significantly associated", "was not credibly associated", body, fixed = TRUE)
+  }
   if (nzchar(st)) paste0(body, ", ", st, ".") else paste0(body, ".")
 }
 
