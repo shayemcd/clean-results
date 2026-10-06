@@ -116,6 +116,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
   }
   lab_fun <- make_labeller(labels, level_labels, clean_labels, label_case)
   models <- list(); stats_list <- list(); est_list <- list(); meta <- list()
+  vcovs <- list(); datas <- list()
   for (dv in names(dvs)) {
     base_col <- if (!is.null(baseline)) unname(baseline[dv]) else NA_character_
     has_base <- !is.na(base_col)
@@ -175,6 +176,8 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     est_list[[dv]] <- est
 
     models[[dv]] <- m
+    vcovs[dv] <- list(V)
+    datas[[dv]] <- d_i
     stats_list[[dv]] <- fit_stats(m, mtype, lab_fun, parts)
     meta[[dv]] <- list(
       type = mtype, exponentiate = exp_i, est_name = if (exp_i) ratio_name(mtype) else "b",
@@ -198,6 +201,8 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
   structure(list(
     estimates = estimates,
     models = models,
+    vcov = vcovs,
+    data = datas,
     stats = stats_list,
     meta = meta,
     settings = list(

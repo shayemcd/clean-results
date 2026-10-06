@@ -40,13 +40,15 @@ test_that("count models report incidence rate ratios", {
   expect_equal(r$std.error / r$estimate,
                unname(sqrt(diag(sandwich::vcovHC(m, type = "HC3")))["conditionLoss"]))
   expect_equal(r$est_name, "IRR")
-  nb <- clean_regress(p, dvs = c(days = "negbin"), predictors = ~ condition)
-  mn <- MASS::glm.nb(days ~ condition, data = p)
+  # simulated counts are Poisson, so theta runs off toward infinity: expected warnings
+  nb <- suppressWarnings(clean_regress(p, dvs = c(days = "negbin"), predictors = ~ condition))
+  mn <- suppressWarnings(MASS::glm.nb(days ~ condition, data = p))
   expect_equal(log(cr_find(nb, "days", "condition", "Loss")$estimate),
                unname(coef(mn)["conditionLoss"]))
   skip_if_not_installed("glmmTMB")
-  nbm <- clean_regress(model_data(), dvs = c(days = "negbin"), predictors = ~ condition,
-                       random = ~ (1 | id), contrasts = "condition")
+  nbm <- suppressWarnings(clean_regress(model_data(), dvs = c(days = "negbin"),
+                                        predictors = ~ condition, random = ~ (1 | id),
+                                        contrasts = "condition"))
   expect_equal(nbm$meta$days$type, "negbin_mixed")
   expect_true(any(nbm$estimates$section == "contrast"))
 })

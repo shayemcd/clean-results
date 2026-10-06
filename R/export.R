@@ -13,8 +13,13 @@
 #' keep italics), or `.txt`. A [cr_ground_truth()] saves to `.json`, `.md`, or
 #' `.csv`.
 #'
-#' @param x A `clean_results`, `cr_table`, `cr_text`, or `cr_ground_truth`
-#'   object. Pass a `cr_table` to control the table style, e.g.
+#' A ggplot (e.g. from [cr_plot_means()]) saves as a figure: `.pdf` (vector,
+#' fonts embedded), `.svg`, `.eps`, `.png`, or `.tiff` (600 dpi). Pass
+#' `width = "1col"`, `"1.5col"` (default), `"2col"`, or a width in mm, and
+#' optionally `height` in mm.
+#'
+#' @param x A `clean_results`, `cr_table`, `cr_text`, `cr_ground_truth`, or
+#'   ggplot object. Pass a `cr_table` to control the table style, e.g.
 #'   `cr_save(cr_table(res, style = "se"), "t2.tex")`.
 #' @param path Output file path.
 #' @param caption Table caption (LaTeX and Word/HTML).
@@ -27,6 +32,10 @@ cr_save <- function(x, path, caption = NULL, label = NULL, landscape = FALSE, ..
   ext <- tolower(tools::file_ext(path))
   dir <- dirname(path)
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+  if (inherits(x, "ggplot")) {
+    save_plot(x, path, ...)
+    return(invisible(path))
+  }
   if (inherits(x, "cr_text")) {
     save_text(x, path)
     return(invisible(path))
@@ -93,4 +102,26 @@ cr_tidy <- function(x) {
   e$estimate_type <- vapply(e$dv, function(d) est_symbol(x$meta[[d]]), "")
   rownames(e) <- NULL
   e
+}
+
+# Figures: vector PDF (cairo, fonts embedded) or SVG/EPS by default; PNG/TIFF at
+# 600 dpi. Widths follow journal columns (figure guide): "1col" 88 mm,
+# "1.5col" 125 mm, "2col" 178 mm, or a number in mm.
+save_plot <- function(plot, path, width = "1.5col", height = NULL, dpi = 600, ...) {
+  w <- if (is.character(width)) {
+    if (!width %in% names(.cr_widths)) {
+      stop("`width` must be \"1col\", \"1.5col\", \"2col\", or a number in mm.", call. = FALSE)
+    }
+    unname(.cr_widths[width])
+  } else width
+  h <- height %||% round(w * 0.65)
+  ext <- tolower(tools::file_ext(path))
+  device <- switch(ext,
+    pdf = grDevices::cairo_pdf,
+    eps = grDevices::cairo_ps,
+    svg = "svg", png = "png", tiff = , tif = "tiff", jpg = , jpeg = "jpeg",
+    stop(sprintf("Unsupported figure format '.%s'. Use .pdf, .svg, .eps, .png, or .tiff.", ext),
+         call. = FALSE))
+  ggplot2::ggsave(path, plot, width = w, height = h, units = "mm", dpi = dpi, device = device,
+                  ...)
 }

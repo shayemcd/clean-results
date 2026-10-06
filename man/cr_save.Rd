@@ -7,8 +7,8 @@
 cr_save(x, path, caption = NULL, label = NULL, landscape = FALSE, ...)
 }
 \arguments{
-\item{x}{A \code{clean_results}, \code{cr_table}, \code{cr_text}, or \code{cr_ground_truth}
-object. Pass a \code{cr_table} to control the table style, e.g.
+\item{x}{A \code{clean_results}, \code{cr_table}, \code{cr_text}, \code{cr_ground_truth}, or
+ggplot object. Pass a \code{cr_table} to control the table style, e.g.
 \code{cr_save(cr_table(res, style = "se"), "t2.tex")}.}
 
 \item{path}{Output file path.}
@@ -40,4 +40,9 @@ Report text from \code{\link[=cr_report]{cr_report()}} saves to \code{.tex} (for
 Overleaf), \code{.md}, \code{.html} (open in a browser and paste into Google Docs to
 keep italics), or \code{.txt}. A \code{\link[=cr_ground_truth]{cr_ground_truth()}} saves to \code{.json}, \code{.md}, or
 \code{.csv}.
+
+A ggplot (e.g. from \code{\link[=cr_plot_means]{cr_plot_means()}}) saves as a figure: \code{.pdf} (vector,
+fonts embedded), \code{.svg}, \code{.eps}, \code{.png}, or \code{.tiff} (600 dpi). Pass
+\code{width = "1col"}, \code{"1.5col"} (default), \code{"2col"}, or a width in mm, and
+optionally \code{height} in mm.
 }

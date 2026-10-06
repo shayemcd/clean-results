@@ -224,6 +224,47 @@ covariates don't inflate it) or, for mixed models, the total SD of one
 observation: residual variance plus the variance the random effects add,
 random slopes included.
 
+## Figures
+
+Every plot is an ordinary ggplot, so `+ labs()`, `+ facet_wrap()`, `+ theme()`
+and any other layer work. Styling follows the lab figure guide
+(`visualization_inspo.Rmd`): a Nature/Science-style theme, the Teal & Terracotta
+palette family, and journal column widths.
+
+```r
+cr_plot_means(res, "trust", "condition")                    # model means + 95% CIs, brackets
+cr_plot_means(res, "trust", "condition", by = "female", type = "dot", p = "value")
+cr_plot_means(d, "trust", "condition", type = "raincloud")  # raw data: cloud, box, points, mean
+cr_plot_means(d, "trust", "condition", uncertainty = "sd", type = "dot", points = TRUE)
+cr_plot_interaction(res, "trust", "condition", "female")    # dots + dashed lines
+cr_plot_interaction(res, "trust", "age", "condition")       # predicted lines + ribbons
+cr_plot_coef(res)                                            # forest plot: 90% thick, 95% thin
+cr_plot_hist(d, "age", by = "condition")
+
+p <- cr_plot_means(res, "trust", "condition") + ggplot2::labs(title = "Study 1")
+attr(p, "cr_note")                                     # method note for the figure caption
+cr_save(p, "figures/fig2.pdf", width = "1col")         # "1col" 88 mm, "1.5col", "2col" 178 mm
+```
+
+- **Means from models** are estimated marginal means with the model's own
+  (robust) SEs; brackets use the same adjusted contrasts as the table, so a
+  star on the figure always matches the table and text. From a data frame:
+  raw means with SE, SD, or CI and Welch *t*-test brackets (Holm by default).
+- **Brackets:** `comparisons = "ref"` (vs. the first level), `"all"`, `"sig"`,
+  or named pairs; `p = "stars"`, `"value"`, or `"none"`. P-values always come
+  from the full set of pairs, so showing fewer brackets never changes them.
+- **Themes:** `theme_cr("nature")` (default), `"psychsci"`, `"jcr"`,
+  `"polsci"`; pass `style =` to any plot or add `theme_cr()` to your own.
+- **Colors:** `cr_palette(n)` picks validated defaults (2 groups: teal,
+  terracotta; 3: slate control, navy, terracotta; 4: navy, teal, terracotta,
+  purple). Every pair in them stays distinguishable for color-blind readers.
+  Slate and teal are almost identical for red-blind readers, so avoid using
+  them together. Other palettes: `"teal_terracotta"`, `"forest_lilac"`,
+  `"nordic_ochre"`, `"partisan_bridge"`; set one project-wide with
+  `options(cleanresults.palette = "forest_lilac")`, or use `scale_fill_cr()`.
+- **Export:** `.pdf` (vector, fonts embedded via cairo), `.svg`, `.eps`,
+  `.png`/`.tiff` at 600 dpi.
+
 ## Methods defaults
 
 | Model | `se = "robust"` (default) | `se = "model"` |
