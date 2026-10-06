@@ -128,7 +128,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
       se_text = se_method_text(mtype, se,
                                if (!is.null(cluster_name)) lab_fun$var(cluster_name)),
       robust_fallback = se == "robust" && !robust_available(mtype),
-      contrast_vars = cvars, n = stats::nobs(m), d_sd = std_sd(m, mtype)
+      contrast_vars = cvars, n = stats::nobs(m)
     )
   }
 
@@ -199,11 +199,26 @@ adjust_across_dvs <- function(est, method, terms, n_dv) {
   est
 }
 
-# Standardized mean differences (Cohen's d) for linear models: factor-level and
-# contrast rows divided by the residual SD (lm) or the total SD, residual plus
-# random-intercept variances (lmer; Westfall, Kenny, & Judd, 2014).
-std_sd <- function(model, type) {
-  if (type == "lm") return(stats::sigma(model))
+# Standardized mean differences (Cohen's d) for linear models.
+# lm: the difference divided by the pooled within-group SD of the raw outcome
+#   across that factor's levels, so covariates don't inflate d (the residual SD
+#   shrinks as covariates explain variance; Lakens, 2013).
+# lmer: divided by the total SD, sqrt(residual + random-intercept variances)
+#   (Westfall, Kenny, & Judd, 2014; Brysbaert & Stevens, 2018).
+std_sd <- function(model, type, variable = NULL) {
+  if (type == "lm") {
+    if (is.null(variable)) return(NA_real_)
+    mf <- stats::model.frame(model)
+    if (!variable %in% names(mf)) return(NA_real_)
+    y <- stats::model.response(mf)
+    g <- as.character(mf[[variable]])
+    ok <- !is.na(y) & !is.na(g)
+    y <- y[ok]; g <- g[ok]
+    n_g <- tapply(y, g, length)
+    v_g <- tapply(y, g, stats::var)
+    keep <- n_g > 1
+    return(sqrt(sum((n_g[keep] - 1) * v_g[keep]) / (sum(n_g[keep]) - sum(keep))))
+  }
   if (type == "lmer") {
     vc <- as.data.frame(lme4::VarCorr(model))
     tau <- sum(vc$vcov[vc$grp != "Residual" & is.na(vc$var2) & vc$var1 %in% "(Intercept)"])
@@ -213,13 +228,16 @@ std_sd <- function(model, type) {
 }
 
 add_std_diff <- function(est, model, type) {
-  sdv <- std_sd(model, type)
   est$es <- est$es.low <- est$es.high <- NA_real_
-  if (is.na(sdv)) return(est)
-  ok <- est$row_type == "level" & !est$is_ref
-  est$es[ok] <- est$estimate[ok] / sdv
-  est$es.low[ok] <- est$conf.low[ok] / sdv
-  est$es.high[ok] <- est$conf.high[ok] / sdv
+  if (!type %in% c("lm", "lmer")) return(est)
+  ok <- which(est$row_type == "level" & !est$is_ref)
+  for (i in ok) {
+    sdv <- std_sd(model, type, est$variable[i])
+    if (is.na(sdv) || sdv <= 0) next
+    est$es[i] <- est$estimate[i] / sdv
+    est$es.low[i] <- est$conf.low[i] / sdv
+    est$es.high[i] <- est$conf.high[i] / sdv
+  }
   est
 }
 

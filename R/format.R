@@ -229,9 +229,9 @@ table_notes <- function(x, spec, note = NULL) {
                           which_txt, adjust_name(x$settings$dv_adjust), length(dvs)))
   }
   if (spec$effect_size && any(!is.na(x$estimates$es))) {
-    out <- c(out, paste("d = standardized mean difference: the difference divided by the residual",
-                        "SD (linear models) or the total SD, residual plus random-intercept",
-                        "variance (linear mixed models)."))
+    out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
+                        "within-group SD of the outcome (linear models) or the total SD, residual",
+                        "plus random-intercept variance (linear mixed models)."))
   }
   if (spec$stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
   c(paste("Note.", paste(out, collapse = " ")), note)

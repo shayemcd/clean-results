@@ -15,8 +15,15 @@ test_that("cr_rows gives one schema with groups and d", {
   g <- r[r$dv == "trust" & r$section == "fixed" & r$level %in% "Gain", ]
   expect_equal(g$group1, "Gain")
   expect_equal(g$group2, "Control")
-  sdv <- res$meta$trust$d_sd
-  expect_equal(g$es, g$estimate / sdv)
+  vc <- as.data.frame(lme4::VarCorr(res$models$trust))
+  expect_equal(g$es, g$estimate / sqrt(sum(vc$vcov)))
+  # lm: pooled within-group SD of the raw outcome, unaffected by covariates
+  d <- make_data()
+  r1 <- clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition + age)
+  lv <- cr_find(r1, "trust", "condition", "Gain")
+  ns <- table(d$condition); vs <- tapply(d$trust, d$condition, var)
+  sp <- sqrt(sum((ns - 1) * vs) / (sum(ns) - length(ns)))
+  expect_equal(lv$es, lv$estimate / sp)
   expect_true(all(is.na(r$es[r$dv == "share"])))
 })
 

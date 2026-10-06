@@ -19,6 +19,7 @@ A \code{cr_tests} object (data) or a data frame (results).
 \description{
 For a data frame, the same as \code{\link[=cr_ttest]{cr_ttest()}}. For \code{\link[=clean_regress]{clean_regress()}} results,
 returns the model-based standardized differences: each factor level versus
-the reference and every pairwise contrast, divided by the residual SD
-(\code{lm}) or the total SD (\code{lmer}), with CIs from the same robust SEs.
+the reference and every pairwise contrast, divided by the pooled
+within-group SD of the outcome (\code{lm}) or the total SD (\code{lmer}), with CIs
+from the same robust SEs.
 }

@@ -184,8 +184,9 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
 #'
 #' For a data frame, the same as [cr_ttest()]. For [clean_regress()] results,
 #' returns the model-based standardized differences: each factor level versus
-#' the reference and every pairwise contrast, divided by the residual SD
-#' (`lm`) or the total SD (`lmer`), with CIs from the same robust SEs.
+#' the reference and every pairwise contrast, divided by the pooled
+#' within-group SD of the outcome (`lm`) or the total SD (`lmer`), with CIs
+#' from the same robust SEs.
 #'
 #' @param x A data frame or a `clean_results` object.
 #' @param ... For data frames, arguments to [cr_ttest()]. For results, `dv`

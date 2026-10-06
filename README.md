@@ -186,8 +186,9 @@ cr_cor(d, c("trust", "liking", "age"))                # every pair
 All of these work with `cr_inline()`, `cr_sentence()`, `cr_report()`,
 `cr_h()`, `cr_ground_truth()`, and `cr_verify()`. Pairwise *p*-values are
 Holm-adjusted across pairs by default (`adjust`); `dv_adjust` corrects across
-outcomes. Model-based *d* divides by the residual SD (lm) or the total SD
-(residual + random-intercept variance) for mixed models.
+outcomes. Model-based *d* divides by the pooled within-group SD of the outcome (lm, so
+covariates don't inflate it) or the total SD (residual + random-intercept
+variance) for mixed models.
 
 ## Methods defaults
 
