@@ -90,8 +90,8 @@ cr_tidy <- function(x) {
 #' @param x A `clean_results` object.
 #' @param dv Outcome name.
 #' @param variable Predictor name, or a coefficient name such as `"age"`.
-#' @param level Factor level (e.g. `"Loss"`) or contrast label
-#'   (e.g. `"Loss vs. Gain"`).
+#' @param level Factor level as in the data (`"LossFraming"`) or as displayed
+#'   (`"Loss framing"`); for contrasts, `"Loss vs. Gain"` in either form.
 #' @param stats Which pieces to include, in order: any of `"est"`, `"se"`,
 #'   `"ci"`, `"test"`, `"p"`.
 #' @param format `"markdown"` (Quarto/R Markdown), `"latex"`, or `"plain"`
@@ -107,7 +107,9 @@ cr_inline <- function(x, dv, variable, level = NULL, stats = c("est", "ci", "p")
   if (!nrow(e)) stop(sprintf("Outcome '%s' not found.", dv), call. = FALSE)
   if (!is.null(level)) {
     sec <- if (grepl(" vs. ", level, fixed = TRUE)) "contrast" else "fixed"
-    r <- e[e$section == sec & e$variable == variable & e$level == level, , drop = FALSE]
+    r <- e[e$section == sec & e$variable == variable &
+             (e$level %in% level | sub(" (ref.)", "", e$label, fixed = TRUE) == level), ,
+           drop = FALSE]
   } else {
     r <- e[e$section == "fixed" & (e$term %in% variable |
              (e$variable == variable & e$row_type == "term")), , drop = FALSE]

@@ -39,14 +39,61 @@ res <- clean_regress(
   dv_labels = c(trust = "Trust", donated = "Donated", shared = "Shared")
 )
 
-res                          # console preview
-cr_table(res, style = "se")  # stargazer style: estimate with stars over (SE)
+res                          # console preview (APA style)
 ```
 
 **Model types:** `"linear"` and `"logistic"` become mixed models automatically
 when you give `random`. You can also name the type explicitly with `"lm"`,
 `"logit"`, `"lmer"` or `"glmer"`. Use `formulas` to give one outcome different
 predictors.
+
+## Table options
+
+Start from a preset and override any piece:
+
+| `style` | `uncertainty` | `p` | `layout` | Looks like |
+|---|---|---|---|---|
+| `"apa"` (default) | `"ci"` | `"value"` | `"columns"` | `b` · `95% CI` · `p` columns |
+| `"stargazer"` | `"se"` | `"stars"` | `"stacked"` | `0.46*` with `(0.21)` on the line below |
+| `"compact"` | `"ci"` | `"stars"` | `"inline"` | `0.46* [0.04, 0.89]` in one cell |
+
+```r
+cr_table(res, uncertainty = "se")                       # SE column instead of CI
+cr_table(res, p = "stars")                              # stars, no p column
+cr_table(res, p = "both")                               # stars and a p column
+cr_table(res, uncertainty = "se", layout = "inline",
+         p = "stars")                                   # 0.46* (0.21), one column per outcome
+cr_table(res, fit = FALSE, random = FALSE)              # coefficients only
+```
+
+### Contrasts: same table or separate
+
+```r
+cr_table(res)                          # contrasts as a section of the main table
+cr_table(res, contrasts = "exclude")   # main table without them
+cr_contrast_table(res)                 # contrasts in their own table
+cr_contrast_table(res, uncertainty = "se", layout = "inline", p = "stars")
+```
+
+The note under each table only describes what that table shows.
+
+### Clean labels
+
+Names are cleaned automatically: `GainFraming` → "Gain framing",
+`age_years` → "Age years", `Loss-Framing` → "Loss framing",
+`participant_id` → "Participant ID". Number ranges keep a dash: `18-24` →
+"18–24". Capitalized acronyms like `SES` stay as they are. Contrast labels are
+built from the cleaned level names.
+
+```r
+clean_regress(...,
+  labels = c(age_years = "Age"),                                  # predictors / outcomes
+  level_labels = list(frame_condition = c(GainFraming = "Gain frame")),
+  dv_labels = c(trust_score = "Trust"),
+  label_case = "sentence",     # or "title", "asis"
+  clean_labels = TRUE)         # FALSE shows raw names
+clean_label("GainFraming")     # use the cleaner anywhere
+```
 
 ## Where the table goes
 
@@ -58,8 +105,9 @@ predictors.
 | **Google Docs** | Upload the `.docx` to Drive and choose *Open with Google Docs*. Or save `.html`, open it in a browser, select the table and paste. |
 | **Anything else** | `cr_save(res, "table1.csv")` for the formatted cells, or `cr_tidy(res)` for the raw numbers. |
 
-To use the stargazer style in a file, pass a `cr_table`:
-`cr_save(cr_table(res, style = "se"), "table1.tex")`.
+To save a specific layout, pass a `cr_table`:
+`cr_save(cr_table(res, style = "stargazer"), "table1.tex")` or
+`cr_save(cr_contrast_table(res), "table2.docx")`.
 
 ## Numbers in text
 

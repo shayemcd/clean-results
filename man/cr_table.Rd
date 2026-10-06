@@ -6,10 +6,13 @@
 \usage{
 cr_table(
   x,
-  style = c("ci", "se"),
+  style = "apa",
+  uncertainty = NULL,
+  p = NULL,
+  layout = NULL,
+  contrasts = c("include", "exclude", "only"),
   digits = 2,
   p_digits = 3,
-  stars = NULL,
   fit = TRUE,
   random = TRUE,
   show_model_type = TRUE,
@@ -20,14 +23,26 @@ cr_table(
 \arguments{
 \item{x}{A \code{clean_results} object from \code{\link[=clean_regress]{clean_regress()}}.}
 
-\item{style}{\code{"ci"} (estimate, CI, and p columns per outcome; APA style) or
-\code{"se"} (stargazer style: estimate with stars over SE in parentheses).}
+\item{style}{Preset: \code{"apa"}, \code{"stargazer"}, or \code{"compact"} (see table).
+\code{"ci"} and \code{"se"} are accepted as aliases for \code{"apa"} and \code{"stargazer"}.}
+
+\item{uncertainty}{\code{"ci"}, \code{"se"}, or \code{"none"}.}
+
+\item{p}{\code{"value"} (a p column), \code{"stars"} (stars on the estimate, no p
+column), \code{"both"}, or \code{"none"}.}
+
+\item{layout}{How the estimate and its uncertainty share space:
+\code{"columns"} (separate columns), \code{"stacked"} (uncertainty on the line
+below the estimate), or \code{"inline"} (one cell: \code{0.46 (0.21)} or
+\code{0.46 [0.04, 0.89]}).}
+
+\item{contrasts}{\code{"include"} (contrasts as a section of this table),
+\code{"exclude"} (leave them out, e.g. to report them in a separate table), or
+\code{"only"} (a contrasts-only table; see \code{\link[=cr_contrast_table]{cr_contrast_table()}}).}
 
 \item{digits}{Decimal places for estimates, CIs, SEs, and fit statistics.}
 
 \item{p_digits}{Decimal places for p-values (APA: no leading zero).}
-
-\item{stars}{Add significance stars. Defaults to \code{TRUE} for \code{style = "se"}.}
 
 \item{fit, random}{Show the model-fit and random-effects blocks.}
 
@@ -44,4 +59,23 @@ An object of class \code{cr_table}.
 Creates a table object that prints in the console, renders natively in
 Quarto/R Markdown (HTML, Word, and PDF), and can be passed to \code{\link[=cr_save]{cr_save()}}.
 Printing a \code{clean_results} object directly uses the defaults below.
+}
+\details{
+Start from a \code{style} preset and override any piece:\tabular{llll}{
+   style \tab uncertainty \tab p \tab layout \cr
+   \code{"apa"} (default) \tab \code{"ci"} \tab \code{"value"} \tab \code{"columns"} \cr
+   \code{"stargazer"} \tab \code{"se"} \tab \code{"stars"} \tab \code{"stacked"} \cr
+   \code{"compact"} \tab \code{"ci"} \tab \code{"stars"} \tab \code{"inline"} \cr
+}
+}
+\examples{
+\dontrun{
+cr_table(res)                                   # APA: b, 95\% CI, p
+cr_table(res, uncertainty = "se")               # b, SE, p
+cr_table(res, p = "stars")                      # stars instead of a p column
+cr_table(res, uncertainty = "se", layout = "inline", p = "stars")  # 0.46* (0.21)
+cr_table(res, style = "stargazer")              # stacked SEs with stars
+cr_table(res, contrasts = "exclude")            # main table without contrasts
+cr_contrast_table(res)                          # contrasts in their own table
+}
 }

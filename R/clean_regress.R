@@ -34,8 +34,17 @@
 #'   correction. `NULL` means every non-intercept row.
 #' @param exponentiate Report odds ratios for logistic models.
 #' @param conf_level Confidence level.
-#' @param labels Named vector of display labels for predictors.
+#' @param labels Named vector of display labels for predictors, e.g.
+#'   `c(condition = "Framing condition")`. Unlisted names are cleaned
+#'   automatically (see `clean_labels`).
+#' @param level_labels Display labels for factor levels: a named vector
+#'   applied to every factor (`c(GainFraming = "Gain frame")`) or a list per
+#'   factor (`list(condition = c(GainFraming = "Gain frame"))`).
 #' @param dv_labels Named vector of display labels for outcomes.
+#' @param clean_labels Tidy names that have no explicit label:
+#'   `GainFraming` -> "Gain framing", `age_years` -> "Age years". See
+#'   [clean_label()].
+#' @param label_case Case for cleaned labels: `"sentence"`, `"title"`, or `"asis"`.
 #' @param intercept Show the intercept row.
 #' @param fit_args List of extra arguments passed to every model fitter, e.g.
 #'   `list(control = lme4::glmerControl(optimizer = "bobyqa"))`.
@@ -60,7 +69,8 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
                           contrasts = NULL, contrast_adjust = "holm",
                           dv_adjust = "none", dv_adjust_terms = NULL,
                           exponentiate = TRUE, conf_level = 0.95,
-                          labels = NULL, dv_labels = NULL, intercept = TRUE,
+                          labels = NULL, level_labels = NULL, dv_labels = NULL,
+                          clean_labels = TRUE, label_case = "sentence", intercept = TRUE,
                           fit_args = list()) {
   se <- match.arg(se)
   if (!is.data.frame(data)) stop("`data` must be a data frame.", call. = FALSE)
@@ -73,6 +83,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     stop(sprintf("Cluster column '%s' not found in `data`.", cluster), call. = FALSE)
   }
 
+  lab_fun <- make_labeller(labels, level_labels, clean_labels, label_case)
   models <- list(); stats_list <- list(); est_list <- list(); meta <- list()
   for (dv in names(dvs)) {
     f <- if (!is.null(formulas[[dv]])) formulas[[dv]] else build_formula(dv, predictors, random)
@@ -94,7 +105,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
 
     V <- model_vcov(m, mtype, se, cluster_vec)
     coefs <- infer_coefs(m, mtype, se, V, conf_level)
-    map <- term_map(m, labels = labels, intercept = intercept)
+    map <- term_map(m, lab_fun = lab_fun, intercept = intercept)
     fixed <- merge(map, coefs, by = "term", all.x = TRUE, sort = FALSE)
     fixed <- fixed[match(map$key, fixed$key), , drop = FALSE]
     fixed$section <- "fixed"
@@ -103,17 +114,18 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
 
     cvars <- contrast_vars(contrasts, m)
     ctr <- pairwise_rows(m, mtype, d_i, cvars, V, se, contrast_adjust, conf_level,
-                         exp_i, labels)
+                         exp_i, lab_fun)
     est <- rbind(fixed[, names(ctr %||% fixed)], ctr)
     est$dv <- dv
     est$p.within <- est$p.value
     est_list[[dv]] <- est
 
     models[[dv]] <- m
-    stats_list[[dv]] <- fit_stats(m, mtype)
+    stats_list[[dv]] <- fit_stats(m, mtype, lab_fun)
     meta[[dv]] <- list(
       type = mtype, exponentiate = exp_i, cluster = cluster_name,
-      se_text = se_method_text(mtype, se, cluster_name),
+      se_text = se_method_text(mtype, se,
+                               if (!is.null(cluster_name)) lab_fun$var(cluster_name)),
       robust_fallback = se == "robust" && !robust_available(mtype),
       contrast_vars = cvars, n = stats::nobs(m)
     )
@@ -123,7 +135,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
   rownames(estimates) <- NULL
   estimates <- adjust_across_dvs(estimates, dv_adjust, dv_adjust_terms, length(dvs))
 
-  dv_lab <- stats::setNames(names(dvs), names(dvs))
+  dv_lab <- stats::setNames(vapply(names(dvs), lab_fun$var, ""), names(dvs))
   if (!is.null(dv_labels)) dv_lab[intersect(names(dv_labels), names(dvs))] <-
     dv_labels[intersect(names(dv_labels), names(dvs))]
 
@@ -135,7 +147,8 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     settings = list(
       dvs = names(dvs), dv_labels = dv_lab, se = se, conf_level = conf_level,
       contrast_adjust = contrast_adjust, dv_adjust = dv_adjust,
-      dv_adjust_terms = dv_adjust_terms, labels = labels
+      dv_adjust_terms = dv_adjust_terms,
+      var_labels = vapply(unique(c(dv_adjust_terms, character())), lab_fun$var, "")
     )
   ), class = "clean_results")
 }

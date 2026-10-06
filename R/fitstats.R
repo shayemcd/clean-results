@@ -4,7 +4,7 @@
 # conditional R2 (random-intercept models; slopes leave ICC and R2 blank).
 # Logistic mixed models use the latent-scale residual variance pi^2 / 3.
 
-fit_stats <- function(model, type) {
+fit_stats <- function(model, type, lab_fun = make_labeller(clean = FALSE)) {
   out <- list(random = list(), fit = list())
   out$fit[["Observations"]] <- stats::nobs(model)
 
@@ -15,9 +15,9 @@ fit_stats <- function(model, type) {
     out$random[["\u03c3\u00b2"]] <- sigma2
     for (i in seq_len(nrow(vc))) {
       nm <- if (vc$var1[i] == "(Intercept)") {
-        sprintf("\u03c4\u2080\u2080 (%s)", vc$grp[i])
+        sprintf("\u03c4\u2080\u2080 (%s)", lab_fun$var(vc$grp[i]))
       } else {
-        sprintf("\u03c4 (%s: %s)", vc$grp[i], vc$var1[i])
+        sprintf("\u03c4 (%s: %s)", lab_fun$var(vc$grp[i]), lab_fun$var(vc$var1[i]))
       }
       out$random[[nm]] <- vc$vcov[i]
     }
@@ -27,7 +27,7 @@ fit_stats <- function(model, type) {
       out$random[["ICC"]] <- tau / (tau + sigma2)
     }
     ng <- lme4::ngrps(model)
-    for (g in names(ng)) out$random[[sprintf("N (%s)", g)]] <- unname(ng[[g]])
+    for (g in names(ng)) out$random[[sprintf("N (%s)", lab_fun$var(g))]] <- unname(ng[[g]])
 
     if (intercept_only) {
       X <- lme4::getME(model, "X")

@@ -4,28 +4,70 @@
 #' Quarto/R Markdown (HTML, Word, and PDF), and can be passed to [cr_save()].
 #' Printing a `clean_results` object directly uses the defaults below.
 #'
+#' Start from a `style` preset and override any piece:
+#'
+#' | style | uncertainty | p | layout |
+#' |---|---|---|---|
+#' | `"apa"` (default) | `"ci"` | `"value"` | `"columns"` |
+#' | `"stargazer"` | `"se"` | `"stars"` | `"stacked"` |
+#' | `"compact"` | `"ci"` | `"stars"` | `"inline"` |
+#'
 #' @param x A `clean_results` object from [clean_regress()].
-#' @param style `"ci"` (estimate, CI, and p columns per outcome; APA style) or
-#'   `"se"` (stargazer style: estimate with stars over SE in parentheses).
+#' @param style Preset: `"apa"`, `"stargazer"`, or `"compact"` (see table).
+#'   `"ci"` and `"se"` are accepted as aliases for `"apa"` and `"stargazer"`.
+#' @param uncertainty `"ci"`, `"se"`, or `"none"`.
+#' @param p `"value"` (a p column), `"stars"` (stars on the estimate, no p
+#'   column), `"both"`, or `"none"`.
+#' @param layout How the estimate and its uncertainty share space:
+#'   `"columns"` (separate columns), `"stacked"` (uncertainty on the line
+#'   below the estimate), or `"inline"` (one cell: `0.46 (0.21)` or
+#'   `0.46 [0.04, 0.89]`).
+#' @param contrasts `"include"` (contrasts as a section of this table),
+#'   `"exclude"` (leave them out, e.g. to report them in a separate table), or
+#'   `"only"` (a contrasts-only table; see [cr_contrast_table()]).
 #' @param digits Decimal places for estimates, CIs, SEs, and fit statistics.
 #' @param p_digits Decimal places for p-values (APA: no leading zero).
-#' @param stars Add significance stars. Defaults to `TRUE` for `style = "se"`.
 #' @param fit,random Show the model-fit and random-effects blocks.
 #' @param show_model_type Show the model type under each outcome name.
 #' @param note Extra note lines appended under the automatic note.
 #' @param auto_note Include the automatic methods note.
 #' @return An object of class `cr_table`.
 #' @export
-cr_table <- function(x, style = c("ci", "se"), digits = 2, p_digits = 3, stars = NULL,
+#' @examples
+#' \dontrun{
+#' cr_table(res)                                   # APA: b, 95% CI, p
+#' cr_table(res, uncertainty = "se")               # b, SE, p
+#' cr_table(res, p = "stars")                      # stars instead of a p column
+#' cr_table(res, uncertainty = "se", layout = "inline", p = "stars")  # 0.46* (0.21)
+#' cr_table(res, style = "stargazer")              # stacked SEs with stars
+#' cr_table(res, contrasts = "exclude")            # main table without contrasts
+#' cr_contrast_table(res)                          # contrasts in their own table
+#' }
+cr_table <- function(x, style = "apa", uncertainty = NULL, p = NULL, layout = NULL,
+                     contrasts = c("include", "exclude", "only"), digits = 2, p_digits = 3,
                      fit = TRUE, random = TRUE, show_model_type = TRUE, note = NULL,
                      auto_note = TRUE) {
   stopifnot(inherits(x, "clean_results"))
-  style <- match.arg(style)
-  g <- build_grid(x, style = style, digits = digits, p_digits = p_digits, stars = stars,
+  contrasts <- match.arg(contrasts)
+  spec <- table_spec(style, uncertainty, p, layout, contrasts)
+  g <- build_grid(x, spec = spec, digits = digits, p_digits = p_digits,
                   fit = fit, random = random, show_model_type = show_model_type,
                   note = note)
   if (!auto_note) g$notes <- note
   structure(list(grid = g, results = x), class = "cr_table")
+}
+
+#' Pairwise contrasts as a separate table
+#'
+#' Shortcut for `cr_table(x, contrasts = "only", ...)`. Pair it with
+#' `cr_table(x, contrasts = "exclude")` for the main table.
+#'
+#' @inheritParams cr_table
+#' @param ... Passed to [cr_table()] (`style`, `uncertainty`, `p`, `layout`, ...).
+#' @return An object of class `cr_table`.
+#' @export
+cr_contrast_table <- function(x, ...) {
+  cr_table(x, contrasts = "only", ...)
 }
 
 as_cr_table <- function(x) {
@@ -79,7 +121,7 @@ cr_flextable <- function(x, font = "Times New Roman", font_size = 10) {
   }
   if (!is.null(g$sub_head)) {
     hi <- length(head_rows)
-    ital <- which(g$sub_head %in% c("b", "p", "OR")) + 1
+    ital <- which(g$sub_head %in% c("b", "p", "OR", "SE")) + 1
     ft <- flextable::italic(ft, i = hi, j = ital, part = "header")
     ft <- flextable::italic(ft, i = hi, j = setdiff(seq_len(ncol(m))[-1], ital), italic = FALSE,
                             part = "header")
@@ -151,20 +193,15 @@ cr_latex <- function(x, caption = NULL, label = NULL, float = TRUE, placement = 
     sprintf("\\cmidrule(lr){%d-%d}", 2 + (j - 1) * g$per, 1 + j * g$per)
   }, ""), collapse = " ")
 
-  head <- c("\\toprule")
-  if (g$per > 1 || !is.null(g$model_types)) {
-    head <- c(head, span_row(g$dv_labels, "%s"))
-    if (!is.null(g$model_types)) head <- c(head, span_row(g$model_types, "\\textit{%s}"))
-    head <- c(head, cmid)
-    if (!is.null(g$sub_head)) {
-      sh <- vapply(g$sub_head, function(s) {
-        if (s %in% c("b", "p")) sprintf("$%s$", s) else if (s == "OR") "\\textit{OR}" else esc(s)
-      }, "")
-      head <- c(head, paste0(" & ", paste(sh, collapse = " & "), " \\\\"))
-    }
-  } else {
-    head <- c(head, paste0(" & ", paste(esc(g$dv_labels), collapse = " & "), " \\\\"))
-  }
+  head <- c("\\toprule", span_row(g$dv_labels, "%s"))
+  if (!is.null(g$model_types)) head <- c(head, span_row(g$model_types, "\\textit{%s}"))
+  head <- c(head, cmid)
+  sh <- vapply(g$sub_head, function(s) {
+    if (s %in% c("b", "p")) sprintf("$%s$", s)
+    else if (s %in% c("OR", "SE")) sprintf("\\textit{%s}", s)
+    else esc(s)
+  }, "")
+  head <- c(head, paste0(" & ", paste(sh, collapse = " & "), " \\\\"))
   head <- c(head, "\\midrule")
 
   body <- character()

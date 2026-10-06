@@ -15,11 +15,7 @@ factor_levels <- function(x) {
   NULL
 }
 
-pretty_label <- function(var, labels) {
-  if (!is.null(labels) && var %in% names(labels)) unname(labels[[var]]) else var
-}
-
-term_map <- function(model, labels = NULL, intercept = TRUE) {
+term_map <- function(model, lab_fun = make_labeller(), intercept = TRUE) {
   X <- stats::model.matrix(model)
   assign <- attr(X, "assign")
   cn <- colnames(X)
@@ -51,7 +47,7 @@ term_map <- function(model, labels = NULL, intercept = TRUE) {
       all(cols %in% paste0(lab, levs))
 
     if (treatment) {
-      vlab <- pretty_label(lab, labels)
+      vlab <- lab_fun$var(lab)
       add(key = paste0(lab, "::header"), term = NA_character_, variable = lab,
           level = NA_character_, label = vlab, row_type = "header", is_ref = FALSE)
       for (lv in levs) {
@@ -60,15 +56,15 @@ term_map <- function(model, labels = NULL, intercept = TRUE) {
         add(key = paste0(lab, "::", lv),
             term = if (is_ref) NA_character_ else coef_name,
             variable = lab, level = lv,
-            label = if (is_ref) paste0(lv, " (ref.)") else lv,
+            label = if (is_ref) paste0(lab_fun$level(lab, lv), " (ref.)") else lab_fun$level(lab, lv),
             row_type = if (is_ref) "ref" else "level", is_ref = is_ref)
       }
     } else {
       for (cc in cols) {
         lbl <- if (length(cols) == 1 && !grepl(":", lab)) {
-          pretty_label(lab, labels)
+          lab_fun$var(lab)
         } else {
-          interaction_label(cc, fac_vars, labels, lgl_vars)
+          interaction_label(cc, fac_vars, lab_fun, lgl_vars)
         }
         add(key = cc, term = cc, variable = lab, level = NA_character_,
             label = lbl, row_type = "term", is_ref = FALSE)
@@ -78,17 +74,17 @@ term_map <- function(model, labels = NULL, intercept = TRUE) {
   do.call(rbind, rows)
 }
 
-# "condLoss:age" -> "Loss x Age"
-interaction_label <- function(coef_name, fac_vars, labels, lgl_vars = character()) {
+# "conditionLoss:age" -> "Loss x Age"
+interaction_label <- function(coef_name, fac_vars, lab_fun, lgl_vars = character()) {
   parts <- strsplit(coef_name, ":", fixed = TRUE)[[1]]
   pretty <- vapply(parts, function(p) {
-    if (p %in% paste0(lgl_vars, "TRUE")) return(pretty_label(sub("TRUE$", "", p), labels))
+    if (p %in% paste0(lgl_vars, "TRUE")) return(lab_fun$var(sub("TRUE$", "", p)))
     hit <- fac_vars[startsWith(p, fac_vars)]
     if (length(hit)) {
       v <- hit[which.max(nchar(hit))]
-      return(sub(v, "", p, fixed = TRUE))
+      return(lab_fun$level(v, sub(v, "", p, fixed = TRUE)))
     }
-    pretty_label(p, labels)
+    lab_fun$var(p)
   }, character(1))
   paste(pretty, collapse = " \u00d7 ")
 }

@@ -20,7 +20,10 @@ clean_regress(
   exponentiate = TRUE,
   conf_level = 0.95,
   labels = NULL,
+  level_labels = NULL,
   dv_labels = NULL,
+  clean_labels = TRUE,
+  label_case = "sentence",
   intercept = TRUE,
   fit_args = list()
 )
@@ -67,9 +70,21 @@ correction. \code{NULL} means every non-intercept row.}
 
 \item{conf_level}{Confidence level.}
 
-\item{labels}{Named vector of display labels for predictors.}
+\item{labels}{Named vector of display labels for predictors, e.g.
+\code{c(condition = "Framing condition")}. Unlisted names are cleaned
+automatically (see \code{clean_labels}).}
+
+\item{level_labels}{Display labels for factor levels: a named vector
+applied to every factor (\code{c(GainFraming = "Gain frame")}) or a list per
+factor (\code{list(condition = c(GainFraming = "Gain frame"))}).}
 
 \item{dv_labels}{Named vector of display labels for outcomes.}
+
+\item{clean_labels}{Tidy names that have no explicit label:
+\code{GainFraming} -> "Gain framing", \code{age_years} -> "Age years". See
+\code{\link[=clean_label]{clean_label()}}.}
+
+\item{label_case}{Case for cleaned labels: \code{"sentence"}, \code{"title"}, or \code{"asis"}.}
 
 \item{intercept}{Show the intercept row.}
 

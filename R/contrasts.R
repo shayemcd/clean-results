@@ -5,7 +5,7 @@
 # within each factor by `contrast_adjust`. Logistic models report odds ratios.
 
 pairwise_rows <- function(model, type, data, vars, V, se, adjust, conf_level,
-                          exponentiate, labels) {
+                          exponentiate, lab_fun = make_labeller()) {
   if (!length(vars)) return(NULL)
   mf <- stats::model.frame(model)
   out <- list()
@@ -23,10 +23,12 @@ pairwise_rows <- function(model, type, data, vars, V, se, adjust, conf_level,
     lcl <- grep("(lower\\.CL|LCL)$", names(s), value = TRUE)[1]
     ucl <- grep("(upper\\.CL|UCL)$", names(s), value = TRUE)[1]
     stat_col <- intersect(c("t.ratio", "z.ratio"), names(s))[1]
-    lab <- gsub(" - | / ", " vs. ", as.character(s$contrast))
-    lab <- gsub("[()]", "", lab)
+    pairs <- match_pairs(as.character(s$contrast), as.character(em@levels[[v]]))
+    raw <- paste(pairs$a, "vs.", pairs$b)
+    lab <- paste(vapply(pairs$a, function(l) lab_fun$level(v, l), ""), "vs.",
+                 vapply(pairs$b, function(l) lab_fun$level(v, l), ""))
 
-    vlab <- pretty_label(v, labels)
+    vlab <- lab_fun$var(v)
     header <- data.frame(
       key = paste0("contrast::", v, "::header"), term = NA_character_, variable = v,
       level = NA_character_, label = vlab, row_type = "header", is_ref = FALSE,
@@ -35,8 +37,8 @@ pairwise_rows <- function(model, type, data, vars, V, se, adjust, conf_level,
       stringsAsFactors = FALSE
     )
     body <- data.frame(
-      key = paste0("contrast::", v, "::", lab), term = lab, variable = v,
-      level = lab, label = lab, row_type = "level", is_ref = FALSE,
+      key = paste0("contrast::", v, "::", raw), term = raw, variable = v,
+      level = raw, label = lab, row_type = "level", is_ref = FALSE,
       estimate = s[[est_col]], std.error = s$SE, statistic = s[[stat_col]],
       df = s$df, p.value = s$p.value, conf.low = s[[lcl]], conf.high = s[[ucl]],
       stringsAsFactors = FALSE
@@ -48,4 +50,25 @@ pairwise_rows <- function(model, type, data, vars, V, se, adjust, conf_level,
   res$section <- "contrast"
   rownames(res) <- NULL
   res
+}
+
+# Recover which two levels each emmeans contrast compares. emmeans writes
+# "A - B", or "(A) - (B)" when a level has spaces or symbols, and "/" for ratios.
+match_pairs <- function(contrast, levels) {
+  wrap <- function(l) if (grepl("^[[:alnum:]_.]+$", l)) l else paste0("(", l, ")")
+  grid <- expand.grid(a = levels, b = levels, stringsAsFactors = FALSE)
+  grid <- grid[grid$a != grid$b, ]
+  keys <- unlist(lapply(c(" - ", " / "), function(op) {
+    stats::setNames(seq_len(nrow(grid)),
+                    paste0(vapply(grid$a, wrap, ""), op, vapply(grid$b, wrap, "")))
+  }))
+  keys2 <- stats::setNames(keys, gsub("[()]", "", names(keys)))
+  idx <- keys[contrast]
+  miss <- is.na(idx)
+  idx[miss] <- keys2[gsub("[()]", "", contrast[miss])]
+  if (anyNA(idx)) {
+    stop("Could not match contrast labels to factor levels: ",
+         paste(contrast[is.na(idx)], collapse = ", "), call. = FALSE)
+  }
+  grid[idx, ]
 }

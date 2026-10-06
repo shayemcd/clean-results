@@ -32,20 +32,31 @@ Loss framing increased sharing relative to control,
 ```{r}
 #| label: tbl-main
 #| tbl-cap: "Effects of framing on trust, donation, and sharing"
-cr_table(res)
+cr_table(res, contrasts = "exclude")
+```
+
+Pairwise comparisons between framing conditions are in @tbl-contrasts.
+
+```{r}
+#| label: tbl-contrasts
+#| tbl-cap: "Pairwise contrasts between framing conditions"
+cr_contrast_table(res, uncertainty = "se", layout = "inline", p = "stars")
 ```
 
 ```{r}
 #| label: tbl-stargazer
 #| tbl-cap: "The same models, stargazer style"
-cr_table(res, style = "se", fit = FALSE)
+cr_table(res, style = "stargazer", fit = FALSE)
 ```
 
 ```{r}
 #| label: export
 #| include: false
 # Files for Overleaf, Word, and Google Docs
-cr_save(res, "tables/table1.tex", caption = "Effects of framing", label = "tab:main")
+cr_save(cr_table(res, contrasts = "exclude"), "tables/table1.tex",
+        caption = "Effects of framing", label = "tab:main")
+cr_save(cr_contrast_table(res), "tables/table2.tex",
+        caption = "Pairwise contrasts", label = "tab:contrasts")
 cr_save(res, "tables/table1.docx")
 cr_save(res, "tables/table1.html")
 ```

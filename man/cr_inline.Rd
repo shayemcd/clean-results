@@ -22,8 +22,8 @@ cr_inline(
 
 \item{variable}{Predictor name, or a coefficient name such as \code{"age"}.}
 
-\item{level}{Factor level (e.g. \code{"Loss"}) or contrast label
-(e.g. \code{"Loss vs. Gain"}).}
+\item{level}{Factor level as in the data (\code{"LossFraming"}) or as displayed
+(\code{"Loss framing"}); for contrasts, \code{"Loss vs. Gain"} in either form.}
 
 \item{stats}{Which pieces to include, in order: any of \code{"est"}, \code{"se"},
 \code{"ci"}, \code{"test"}, \code{"p"}.}

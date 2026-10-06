@@ -37,56 +37,85 @@ adjust_name <- function(m) {
   if (m %in% names(nm)) unname(nm[m]) else m
 }
 
-build_grid <- function(x, style = c("ci", "se"), digits = 2, p_digits = 3,
-                       stars = NULL, fit = TRUE, random = TRUE,
-                       show_model_type = TRUE, note = NULL) {
-  style <- match.arg(style)
-  if (is.null(stars)) stars <- style == "se"
+# Resolve a style preset plus any explicit overrides into one display spec.
+table_spec <- function(style = "apa", uncertainty = NULL, p = NULL, layout = NULL,
+                       contrasts = "include") {
+  style <- match.arg(style, c("apa", "stargazer", "compact", "ci", "se"))
+  preset <- switch(style,
+    apa = , ci = list(uncertainty = "ci", p = "value", layout = "columns"),
+    stargazer = , se = list(uncertainty = "se", p = "stars", layout = "stacked"),
+    compact = list(uncertainty = "ci", p = "stars", layout = "inline")
+  )
+  spec <- list(
+    uncertainty = match.arg(uncertainty %||% preset$uncertainty, c("ci", "se", "none")),
+    p = match.arg(p %||% preset$p, c("value", "stars", "both", "none")),
+    layout = match.arg(layout %||% preset$layout, c("columns", "stacked", "inline")),
+    contrasts = match.arg(contrasts, c("include", "exclude", "only"))
+  )
+  spec$stars <- spec$p %in% c("stars", "both")
+  spec$p_col <- spec$p %in% c("value", "both")
+  spec$unc_col <- spec$layout == "columns" && spec$uncertainty != "none"
+  spec$cols <- c("est", if (spec$unc_col) "unc", if (spec$p_col) "p")
+  spec
+}
+
+build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
+                       fit = TRUE, random = TRUE, show_model_type = TRUE, note = NULL) {
   dvs <- x$settings$dvs
   est <- x$estimates
-  per <- if (style == "ci") 3L else 1L
+  only <- spec$contrasts == "only"
+  if (only && !any(est$section == "contrast")) {
+    stop("No pairwise contrasts to show. Set `contrasts` in clean_regress().", call. = FALSE)
+  }
+  per <- length(spec$cols)
   ncell <- per * length(dvs)
   rows <- list()
   add_row <- function(label, type, indent, cells = rep("", ncell)) {
     rows[[length(rows) + 1]] <<- list(label = label, type = type, indent = indent, cells = cells)
   }
   block <- function(j) ((j - 1) * per + 1):(j * per)
+  unc_txt <- function(r) {
+    switch(spec$uncertainty,
+      se = sprintf("(%s)", fmt_num(r$std.error, digits)),
+      ci = fmt_ci(r$conf.low, r$conf.high, digits),
+      none = "")
+  }
 
   emit_section <- function(sec) {
     sub <- est[est$section == sec, , drop = FALSE]
-    keys <- unique(sub$key)
-    for (k in keys) {
+    for (k in unique(sub$key)) {
       r0 <- sub[sub$key == k, , drop = FALSE][1, ]
       indent <- if (r0$row_type %in% c("level", "ref")) 1L else 0L
-      cells <- rep("", ncell); se_cells <- rep("", ncell)
+      cells <- rep("", ncell); below <- rep("", ncell)
       for (j in seq_along(dvs)) {
         r <- sub[sub$key == k & sub$dv == dvs[j], , drop = FALSE]
-        if (!nrow(r)) next
+        if (!nrow(r) || r$row_type[1] == "header") next
         r <- r[1, ]
         b <- block(j)
-        if (r$row_type == "header") next
         if (isTRUE(r$is_ref)) {
           cells[b[1]] <- "\u2014"
           next
         }
         e <- fmt_num(r$estimate, digits)
-        if (stars) e <- paste0(e, fmt_stars(r$p.value))
-        if (style == "ci") {
-          cells[b] <- c(e, fmt_ci(r$conf.low, r$conf.high, digits), fmt_p(r$p.value, p_digits))
-        } else {
-          cells[b] <- e
-          se_cells[b] <- sprintf("(%s)", fmt_num(r$std.error, digits))
-        }
+        if (spec$stars) e <- paste0(e, fmt_stars(r$p.value))
+        if (spec$layout == "inline" && spec$uncertainty != "none") e <- paste(e, unc_txt(r))
+        vals <- c(est = e,
+                  unc = if (spec$unc_col) unc_txt(r),
+                  p = if (spec$p_col) fmt_p(r$p.value, p_digits))
+        cells[b] <- vals[spec$cols]
+        if (spec$layout == "stacked") below[b[1]] <- unc_txt(r)
       }
-      type <- if (r0$row_type == "header") "header" else r0$row_type
-      add_row(r0$label, type, indent, cells)
-      if (style == "se" && type %in% c("term", "level")) add_row("", "se", indent, se_cells)
+      add_row(r0$label, r0$row_type, indent, cells)
+      if (spec$layout == "stacked" && spec$uncertainty != "none" &&
+          r0$row_type %in% c("term", "level")) {
+        add_row("", "se", indent, below)
+      }
     }
   }
 
-  emit_section("fixed")
-  if (any(est$section == "contrast")) {
-    add_row("Pairwise contrasts", "section", 0L)
+  if (!only) emit_section("fixed")
+  if (spec$contrasts != "exclude" && any(est$section == "contrast")) {
+    if (!only) add_row("Pairwise contrasts", "section", 0L)
     emit_section("contrast")
   }
 
@@ -106,75 +135,97 @@ build_grid <- function(x, style = c("ci", "se"), digits = 2, p_digits = 3,
       add_row(nm, "stat", 1L, cells)
     }
   }
-  if (random) emit_stats("random", "Random effects")
-  if (fit) emit_stats("fit", "Model fit")
+  if (!only && random) emit_stats("random", "Random effects")
+  if (!only && fit) emit_stats("fit", "Model fit")
 
-  est_lab <- vapply(dvs, function(d) if (x$meta[[d]]$exponentiate) "OR" else "b", "")
-  sub_head <- if (style == "ci") {
-    unlist(lapply(est_lab, function(l) c(l, sprintf("%g%% CI", 100 * x$settings$conf_level), "p")))
-  } else NULL
+  ci_lab <- sprintf("%g%% CI", 100 * x$settings$conf_level)
+  unc_lab <- switch(spec$uncertainty, se = "SE", ci = ci_lab, none = "")
+  sub_head <- unlist(lapply(dvs, function(d) {
+    e <- if (x$meta[[d]]$exponentiate) "OR" else if (only) "Diff." else "b"
+    if (spec$layout == "inline" && spec$uncertainty != "none") {
+      e <- paste(e, if (spec$uncertainty == "se") "(SE)" else sprintf("[%s]", ci_lab))
+    }
+    c(est = e, unc = unc_lab, p = "p")[spec$cols]
+  }), use.names = FALSE)
   mtype <- vapply(dvs, function(d) .type_labels[[x$meta[[d]]$type]], "")
-  if (style == "se") mtype <- sprintf("%s (%s)", mtype, est_lab)
 
   list(
     rows = rows,
-    style = style,
+    spec = spec,
     per = per,
     dv_labels = unname(x$settings$dv_labels[dvs]),
     model_types = if (show_model_type) unname(mtype) else NULL,
     sub_head = sub_head,
-    notes = table_notes(x, style, stars, note)
+    notes = table_notes(x, spec, note)
   )
 }
 
-table_notes <- function(x, style, stars, note = NULL) {
+table_notes <- function(x, spec, note = NULL) {
   dvs <- x$settings$dvs
   meta <- x$meta
   lab <- x$settings$dv_labels
+  only <- spec$contrasts == "only"
+  show_contrasts <- spec$contrasts != "exclude" && any(x$estimates$section == "contrast")
   out <- character()
 
   any_lin <- any(!vapply(meta, `[[`, logical(1), "exponentiate"))
   any_or <- any(vapply(meta, `[[`, logical(1), "exponentiate"))
-  est_txt <- c(if (any_lin) "b = unstandardized coefficient", if (any_or) "OR = odds ratio")
-  out <- c(out, paste0(paste(est_txt, collapse = "; "), "; CI = confidence interval."))
+  abbr <- c(
+    if (any_lin) {
+      if (only) "Diff. = difference in estimated marginal means" else "b = unstandardized coefficient"
+    },
+    if (any_or) {
+      if (only) "OR = ratio of odds" else "OR = odds ratio"
+    },
+    if (spec$uncertainty == "se") "SE = standard error",
+    if (spec$uncertainty == "ci") "CI = confidence interval"
+  )
+  out <- c(out, paste0(paste(abbr, collapse = "; "), "."))
 
   se_txt <- vapply(meta, `[[`, character(1), "se_text")
+  what <- c(if (spec$uncertainty == "se") "SEs", if (spec$uncertainty == "ci") "CIs",
+            if (spec$p != "none") "p-values")
+  what <- if (length(what)) paste(what, collapse = " and ") else "Inference"
   if (length(unique(se_txt)) == 1) {
-    out <- c(out, sprintf("CIs and p-values use %s.", se_txt[1]))
+    out <- c(out, sprintf("%s use %s.", what, se_txt[1]))
   } else {
     parts <- vapply(unique(se_txt), function(t) {
       sprintf("%s (%s)", t, paste(lab[names(se_txt)[se_txt == t]], collapse = ", "))
     }, character(1))
-    out <- c(out, sprintf("CIs and p-values use %s.", paste(parts, collapse = "; ")))
+    out <- c(out, sprintf("%s use %s.", what, paste(parts, collapse = "; ")))
   }
   if (any(vapply(meta, `[[`, logical(1), "robust_fallback"))) {
     out <- c(out, "Cluster-robust SEs are not available for logistic mixed models, so those models use model-based Wald SEs.")
   }
-  if (style == "se") {
-    out <- c(out, if (any_or) "Standard errors in parentheses (delta-method SEs for odds ratios)."
-             else "Standard errors in parentheses.")
+  if (spec$layout != "columns" && spec$uncertainty != "none") {
+    out <- c(out, if (spec$uncertainty == "se") {
+      if (any_or) "Standard errors in parentheses (delta-method SEs for odds ratios)."
+      else "Standard errors in parentheses."
+    } else sprintf("%g%% CIs in brackets.", 100 * x$settings$conf_level))
+  } else if (spec$uncertainty == "se" && any_or) {
+    out <- c(out, "SEs for odds ratios are delta-method SEs.")
   }
-  if (any(x$estimates$is_ref, na.rm = TRUE)) {
+  if (!only && any(x$estimates$is_ref, na.rm = TRUE)) {
     out <- c(out, "(ref.) marks the reference category for each factor.")
   }
-  if (any(x$estimates$section == "contrast")) {
+  if (show_contrasts) {
     adj <- x$settings$contrast_adjust
     adj_txt <- if (adj == "none") "are unadjusted" else
       sprintf("and CIs are %s-adjusted within each factor", adjust_name(adj))
     or_txt <- if (any_or) " (ratios of odds for logistic models)" else ""
+    lead <- if (only) "Contrasts" else "Pairwise contrasts"
     out <- c(out, sprintf(
-      "Pairwise contrasts compare estimated marginal means averaged over other predictors%s; their p-values %s.",
-      or_txt, adj_txt))
+      "%s compare estimated marginal means averaged over other predictors%s; their p-values %s.",
+      lead, or_txt, adj_txt))
   }
   if (x$settings$dv_adjust != "none" && length(dvs) > 1) {
     terms <- x$settings$dv_adjust_terms
     which_txt <- if (is.null(terms)) "All non-intercept p-values" else
-      sprintf("p-values for %s", paste(vapply(terms, pretty_label, "", x$settings$labels),
-                                       collapse = ", "))
+      sprintf("p-values for %s", paste(x$settings$var_labels[terms], collapse = ", "))
     out <- c(out, sprintf("%s are additionally %s-adjusted across the %d outcomes.",
                           which_txt, adjust_name(x$settings$dv_adjust), length(dvs)))
   }
-  if (stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
+  if (spec$stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
   c(paste("Note.", paste(out, collapse = " ")), note)
 }
 
