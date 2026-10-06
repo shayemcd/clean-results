@@ -69,3 +69,14 @@ test_that("omit hides matched rows from the table and lists them in the note", {
   tex <- cr_latex(tab)
   expect_false(grepl("Gain", tex, fixed = TRUE))
 })
+
+test_that("not-estimable coefficients print blank, without empty parentheses", {
+  set.seed(1)
+  d <- data.frame(y = rnorm(100), a = rep(c(TRUE, FALSE), 50), b = rep(c(FALSE, TRUE), each = 50))
+  d$c <- FALSE
+  r <- clean_regress(d, dvs = c(y = "linear"), predictors = ~ a + b + c, se = "model")
+  tex <- cr_latex(cr_table(r, style = "stargazer"))
+  expect_false(grepl("& () \\\\", tex, fixed = TRUE))
+  expect_true(grepl("not estimable", tex, fixed = TRUE))
+  expect_false(any(grepl("not estimable", cr_table(res_fixture())$grid$notes)))
+})

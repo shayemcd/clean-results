@@ -81,6 +81,7 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
   }
   block <- function(j) ((j - 1) * per + 1):(j * per)
   unc_txt <- function(r) {
+    if (is.na(r$estimate)) return("")   # not estimable (e.g. a collinear term dropped by the fitter)
     switch(spec$uncertainty,
       se = sprintf("(%s)", fmt_num(r$std.error, digits)),
       ci = fmt_ci(r$conf.low, r$conf.high, digits),
@@ -168,7 +169,9 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
     dv_labels = unname(x$settings$dv_labels[dvs]),
     model_types = if (show_model_type) unname(mtype) else NULL,
     sub_head = sub_head,
-    notes = table_notes(x, spec, note)
+    notes = c(table_notes(x, spec, note),
+              if (any(is.na(est$estimate) & est$row_type %in% c("term", "level") & !est$is_ref))
+                "Empty cells: coefficient not estimable in that model (collinear or no observations).")
   )
 }
 
