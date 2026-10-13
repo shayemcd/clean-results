@@ -4,12 +4,25 @@
 \name{cleanresults-package}
 \alias{cleanresults}
 \alias{cleanresults-package}
-\title{cleanresults: Publication-Ready Regression Tables for Multiple Outcomes}
+\title{cleanresults: Publication-Ready Regression Tables, Text, and Figures}
 \description{
-Fits linear, logistic, and mixed-effects regressions for one or more dependent variables and renders a single publication-ready table with robust standard errors, explicit reference categories, pairwise contrasts, and multiple-comparison corrections within factors and across outcomes. Tables render natively in Quarto (HTML, Word, PDF) and export to Word, LaTeX (Overleaf), and HTML that pastes cleanly into Google Docs.
+Fits linear, logistic, count, ordinal, mixed-effects, and Bayesian regressions for one or more outcomes and renders a single publication-ready table with robust standard errors, explicit reference categories, pairwise contrasts, and multiple-comparison corrections within factors and across outcomes. Builds results text, hypothesis summaries, and figures from the same fitted objects, and checks numbers typed in a manuscript against them. Tables render natively in Quarto (HTML, Word, PDF) and export to Word, LaTeX (Overleaf), and HTML that pastes cleanly into Google Docs.
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/shayemcd/clean-results}
+  \item Report bugs at \url{https://github.com/shayemcd/clean-results/issues}
+}
+
 }
 \author{
-\strong{Maintainer}: Shaye \email{shaye.mcd@gmail.com}
+\strong{Maintainer}: Shaye Hopkins \email{shaye.mcd@gmail.com} [copyright holder]
+
+Authors:
+\itemize{
+  \item Shaye Hopkins \email{shaye.mcd@gmail.com} [copyright holder]
+}
 
 }
 \keyword{internal}

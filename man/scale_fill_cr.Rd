@@ -4,7 +4,7 @@
 \alias{scale_fill_cr}
 \alias{scale_colour_cr}
 \alias{scale_color_cr}
-\title{Scales in the lab palettes}
+\title{Scales in the cleanresults palettes}
 \usage{
 scale_fill_cr(palette = NULL, ...)
 
@@ -22,5 +22,5 @@ the validated default for the number of groups.}
 A ggplot2 scale.
 }
 \description{
-Scales in the lab palettes
+Scales in the cleanresults palettes
 }

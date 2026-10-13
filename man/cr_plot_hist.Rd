@@ -42,5 +42,5 @@ A ggplot object.
 }
 \description{
 A histogram with a dashed line at the mean; with \code{by}, one panel per group
-in the lab palette (or overlaid).
+in the package palette (or overlaid).
 }
