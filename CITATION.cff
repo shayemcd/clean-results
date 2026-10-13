@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use cleanresults in your work, please cite it as below."
+type: software
+title: "cleanresults: Publication-Ready Regression Tables, Text, and Figures"
+abstract: >-
+  An R package that fits regressions for one or more outcomes and renders
+  publication-ready tables, results text, and figures from the same fitted
+  objects, with robust standard errors, explicit reference categories,
+  multiple-comparison corrections, and checks that manuscript numbers match
+  the results.
+version: 0.1.0
+date-released: "2026-10-13"
+license: MIT
+repository-code: "https://github.com/shayemcd/clean-results"
+url: "https://github.com/shayemcd/clean-results"
+authors:
+  - family-names: Hopkins
+    given-names: Shaye
+    email: shaye.mcd@gmail.com

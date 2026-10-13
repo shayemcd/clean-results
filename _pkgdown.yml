@@ -1,0 +1,61 @@
+url: https://shayemcd.github.io/clean-results/
+
+template:
+  bootstrap: 5
+
+articles:
+  - title: Guides
+    contents:
+      - cleanresults
+      - results-text
+      - figures
+      - methods
+
+reference:
+  - title: Fit models
+    contents:
+      - clean_regress
+      - cr_example_data
+  - title: Tables
+    contents:
+      - cr_table
+      - cr_contrast_table
+      - cr_save
+      - cr_latex
+      - cr_flextable
+      - cr_tidy
+      - cr_rows
+      - clean_label
+  - title: Results text
+    contents:
+      - cr_inline
+      - cr_direction
+      - cr_sentence
+      - cr_text_as
+      - cr_report
+  - title: Hypotheses and drift checks
+    contents:
+      - cr_hypotheses
+      - cr_h
+      - cr_expect
+      - cr_verify
+      - cr_ground_truth
+      - cr_diff
+  - title: Simple tests and effect sizes
+    contents:
+      - cr_d
+      - cr_ttest
+      - cr_chisq
+      - cr_anova
+      - cr_cor
+      - cr_equivalence
+  - title: Figures
+    contents:
+      - cr_plot_means
+      - cr_plot_interaction
+      - cr_plot_coef
+      - cr_plot_hist
+      - theme_cr
+      - cr_palette
+      - cr_palettes
+      - scale_fill_cr

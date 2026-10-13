@@ -3,3 +3,9 @@
 .RData
 *.Rcheck
 cleanresults_*.tar.gz
+.DS_Store
+docs/
+inst/doc
+tests/testthat/_problems/
+*_files/
+.quarto/
