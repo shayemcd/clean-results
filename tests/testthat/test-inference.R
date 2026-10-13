@@ -63,3 +63,13 @@ test_that("explicit cluster on lm uses CR2", {
   tt <- cr_tidy(res)
   expect_equal(tt$std.error[match(ct$Coef, tt$term)], ct$SE, tolerance = 1e-8)
 })
+
+test_that("an across-outcome correction over linear and logistic outcomes does not warn", {
+  d <- make_data()
+  expect_no_warning(
+    clean_regress(d, dvs = c(trust = "linear", share = "logistic"),
+                  predictors = ~ condition, random = ~ (1 | id),
+                  contrasts = "condition", dv_adjust = "holm",
+                  dv_adjust_terms = "condition")
+  )
+})

@@ -285,10 +285,15 @@ ci_levels <- function(est, conf_level) {
 # Critical value implied by a row's CI: half-width / SE, on the log scale for
 # odds ratios (where std.error is the delta-method SE of the ratio).
 ci_q <- function(r) {
+  # computed per branch: ifelse() would evaluate log() on the linear rows too,
+  # where a negative estimate gives a spurious "NaNs produced" warning
   log_scale <- r$log_scale %in% TRUE
-  ifelse(log_scale,
-         log(r$conf.high / r$estimate) / (r$std.error / r$estimate),
-         (r$conf.high - r$estimate) / r$std.error)
+  q <- rep(NA_real_, nrow(r))
+  q[log_scale] <- log(r$conf.high[log_scale] / r$estimate[log_scale]) /
+    (r$std.error[log_scale] / r$estimate[log_scale])
+  q[!log_scale] <- (r$conf.high[!log_scale] - r$estimate[!log_scale]) /
+    r$std.error[!log_scale]
+  q
 }
 
 rescale_ci <- function(r, new_level) {
