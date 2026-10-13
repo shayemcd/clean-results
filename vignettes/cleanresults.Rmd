@@ -1,0 +1,174 @@
+---
+title: "Getting started with cleanresults"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with cleanresults}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+One call fits regressions for several outcomes and gives back one
+publication-ready table. This guide covers fitting, the model types, the
+table options, and where the table goes. The other guides cover
+[results text and drift checks](results-text.html), [figures](figures.html),
+and the [methods defaults](methods.html).
+
+## Fit models and get a table
+
+```{r fit}
+library(cleanresults)
+
+d <- cr_example_data()   # simulated: 80 people x 4 observations
+
+res <- clean_regress(
+  d,
+  dvs = c(trust = "linear", share = "logistic", bought = "logistic"),
+  predictors = ~ condition + age,
+  random = ~ (1 | id),                # makes "linear"/"logistic" mixed models
+  contrasts = "condition",            # pairwise contrasts
+  contrast_adjust = "holm",           # correction within factor
+  dv_adjust = "holm",                 # correction across outcomes
+  dv_adjust_terms = "condition",      # ...only for condition rows
+  labels = c(condition = "Condition", age = "Age (years)"),
+  dv_labels = c(trust = "Trust", share = "Shared", bought = "Bought")
+)
+
+res
+```
+
+The table has robust SEs by default, reference categories as rows, pairwise
+contrasts with a correction within each factor, an optional correction across
+outcomes, and a methods note that states exactly which SEs and corrections
+were used. Use `formulas = list(outcome = outcome ~ other_predictors)` to give
+one outcome a different set of predictors.
+
+## Model types
+
+`"linear"`, `"logistic"`, `"poisson"`, `"negbin"`, and `"ordinal"` become mixed
+models automatically when you give `random`.
+
+| Type | No `random` | With `random` | Reported as |
+|---|---|---|---|
+| `"linear"` | `lm` | `lmerTest::lmer` | *b* |
+| `"logistic"` | `glm` binomial | `lme4::glmer` | OR |
+| `"poisson"` | `glm` Poisson (also Poisson quasi-ML for skewed non-negative outcomes such as miles driven) | `glmer` Poisson | IRR (ratio of means) |
+| `"negbin"` | `MASS::glm.nb` | `glmmTMB` nbinom2 | IRR |
+| `"ordinal"` (alias `"polr"`) | `ordinal::clm` | `ordinal::clmm` | cumulative OR |
+| `"bayes_linear"`, `"bayes_logistic"`, `"bayes_ordinal"`, `"bayes_poisson"`, `"bayes_negbin"` | `brms::brm` | `brms::brm` | posterior median, 95% CrI, *pd* |
+
+`"polr"` fits the same proportional-odds model as `MASS::polr`, through
+`ordinal::clm` because it supports robust SEs and mixed versions. Bayesian
+models take priors and sampler settings through `fit_args`, for example
+`fit_args = list(prior = brms::prior(normal(0, 1), class = "b"), chains = 4, iter = 4000)`.
+The optional packages (`lme4`, `lmerTest`, `ordinal`, `glmmTMB`, `brms`) are
+only needed for the model types that use them.
+
+### Baseline adjustment, simple effects, equivalence
+
+```{r baseline}
+set.seed(1)
+d$trust_pre <- d$trust + rnorm(nrow(d))
+
+# ANCOVA with the baseline centered; add lin = "condition" for Lin (2013)
+clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition,
+              baseline = c(trust = "trust_pre"))
+```
+
+```{r simple-effects}
+# simple effects of condition within each level of female
+clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition * female,
+              contrasts = "condition", contrast_by = "female")
+```
+
+```{r equivalence}
+# two one-sided tests against bounds of +/- 0.2 outcome units
+eq <- cr_equivalence(res, bounds = 0.2, dv = "trust", variable = "condition")
+eq
+```
+
+For ratio-scale outcomes pass `bounds = c(0.8, 1.25)`. To test in *d* units,
+pass a `cr_ttest()` result with `scale = "d"`.
+
+## Table options
+
+Start from a preset and override any piece.
+
+| `style` | `uncertainty` | `p` | `layout` | Looks like |
+|---|---|---|---|---|
+| `"apa"` (default) | `"ci"` | `"value"` | `"columns"` | `b` · `95% CI` · `p` columns |
+| `"stargazer"` | `"se"` | `"stars"` | `"stacked"` | `0.46*` with `(0.21)` on the line below |
+| `"compact"` | `"ci"` | `"stars"` | `"inline"` | `0.46* [0.04, 0.89]` in one cell |
+
+```{r table-options}
+cr_table(res, uncertainty = "se", layout = "inline", p = "stars")
+```
+
+```{r table-options-2}
+cr_table(res, style = "stargazer", fit = FALSE)
+```
+
+Other useful arguments: `p = "both"` (stars and a *p* column),
+`fit = FALSE` (no fit block), `random = FALSE` (no random-effect rows), and
+`effect_size = TRUE` (a Cohen's *d* column).
+
+### Contrasts: same table or separate
+
+```{r contrasts}
+cr_table(res, contrasts = "exclude")   # main table without the contrasts
+cr_contrast_table(res)                 # contrasts in their own table
+```
+
+The note under each table only describes what that table shows.
+
+### Clean labels
+
+Names are cleaned automatically: `GainFraming` becomes "Gain framing",
+`age_years` becomes "Age years", `Loss-Framing` becomes "Loss framing", and
+`participant_id` becomes "Participant ID". Number ranges keep a dash
+(`18-24` becomes "18–24"), and capitalized acronyms like `SES` stay as they
+are.
+
+```{r labels}
+clean_label("GainFraming")
+clean_label("participant_id")
+clean_label("18-24")
+```
+
+Override any of them with `labels` (predictors and outcomes), `level_labels`
+(factor levels, as a named list per factor), and `dv_labels`. Use
+`label_case = "sentence"`, `"title"`, or `"asis"`, and `clean_labels = FALSE`
+to show raw names.
+
+## Where the table goes
+
+| Destination | How |
+|---|---|
+| **Quarto / R Markdown** | Put `cr_table(res)` in a chunk with `#| label: tbl-main` and `#| tbl-cap: "..."`, then cite it with `@tbl-main`. It renders natively to HTML, Word and PDF. |
+| **Overleaf** | `cr_save(res, "table1.tex", caption = "...", label = "tab:main")`, then `\input{table1.tex}`. The preamble needs `\usepackage{booktabs}` and `\usepackage{threeparttable}`. Compiles with pdfLaTeX. |
+| **Word** | `cr_save(res, "table1.docx")` gives a native Word table (APA booktabs look, Times New Roman). Add `landscape = TRUE` for wide tables. |
+| **Google Docs** | Upload the `.docx` to Drive and choose *Open with Google Docs*. Or save `.html`, open it in a browser, select the table and paste. |
+| **Anything else** | `cr_save(res, "table1.csv")` for the formatted cells, or `cr_tidy(res)` for the raw numbers. |
+
+```{r save}
+out <- tempdir()
+cr_save(res, file.path(out, "table1.tex"), caption = "Effects of condition",
+        label = "tab:main")
+cr_save(res, file.path(out, "table1.docx"))
+cr_save(res, file.path(out, "table1.html"))
+cr_save(res, file.path(out, "table1.csv"))
+list.files(out, pattern = "^table1")
+```
+
+To save a specific layout, pass a `cr_table`:
+`cr_save(cr_table(res, style = "stargazer"), "table1.tex")` or
+`cr_save(cr_contrast_table(res), "table2.docx")`.
+
+The raw numbers behind every table:
+
+```{r tidy}
+head(cr_tidy(res))
+```
