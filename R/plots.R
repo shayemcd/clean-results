@@ -3,8 +3,8 @@
 # Every cr_plot_*() returns an ordinary ggplot, so `+ labs()`, `+ facet_wrap()`,
 # `+ theme()` and any other layer work as usual. Means and brackets come from
 # the same models (and the same covariance matrices and corrections) as the
-# tables and text, or from the raw data when a data frame is passed. Styling
-# follows the lab figure guide: see theme_cr() and cr_palettes.
+# tables and text, or from the raw data when a data frame is passed. See
+# theme_cr() and cr_palettes for styling.
 
 #' Bar, dot, box, and raincloud plots of group means with significance brackets
 #'
@@ -335,7 +335,7 @@ cr_plot_interaction <- function(x, dv, x_var, trace, uncertainty = c("ci", "se",
 #' Coefficient (forest) plots
 #'
 #' Dot-and-whisker plot of the estimates in the results table: one row per
-#' term, outcomes in the lab palette, a dashed line at no effect, a thick
+#' term, outcomes in the package palette, a dashed line at no effect, a thick
 #' inner 90% CI and a thin outer CI at the table's level (the same interval
 #' the table reports), and the estimate with stars (or the *p*-value) above
 #' each point. Ratios (OR, IRR) use a log axis.
@@ -349,7 +349,7 @@ cr_plot_interaction <- function(x, dv, x_var, trace, uncertainty = c("ci", "se",
 #' @param p `"stars"`, `"value"`, or `"none"` for the point labels.
 #' @param show_values Print the estimate above each point.
 #' @param palette Palette name or colors.
-#' @param style Theme style (default `"polsci"`, the guide's forest style).
+#' @param style Theme style (default `"polsci"`, the forest style).
 #' @param digits Decimal places.
 #' @return A ggplot object.
 #' @export
@@ -440,7 +440,7 @@ cr_plot_coef <- function(x, dv = NULL, terms = NULL, contrasts = FALSE, inner = 
 #' Histograms
 #'
 #' A histogram with a dashed line at the mean; with `by`, one panel per group
-#' in the lab palette (or overlaid).
+#' in the package palette (or overlaid).
 #'
 #' @param data A data frame.
 #' @param var Variable to plot.

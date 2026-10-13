@@ -1,12 +1,12 @@
 # Figure theme and palettes ----------------------------------------------------
 #
-# Follows the lab figure guide (Templates/visualization_inspo.Rmd): a clean
-# Nature/Science default with journal variants, the Teal & Terracotta palette
-# family, sans-serif type sized for an 85-180 mm column, and vector export.
+# A clean Nature/Science default with journal variants, the Teal & Terracotta
+# palette family, sans-serif type sized for an 85-180 mm column, and vector
+# export.
 
 #' Figure palettes
 #'
-#' `cr_palettes` holds the lab palettes (Teal & Terracotta, Forest & Lilac,
+#' `cr_palettes` holds the package palettes (Teal & Terracotta, Forest & Lilac,
 #' Nordic Pine & Ochre, Partisan & Bridging) and the default category orders
 #' the plotting functions use. The defaults were checked for color-vision
 #' deficiency: every pair of colors stays distinguishable for protan, deutan,
@@ -31,7 +31,7 @@ cr_palettes <- list(
   `5` = c("#0B1B66", "#20A49C", "#C05A3E", "#7D5BA6", "#D9C5B2")
 )
 
-# Ink and structure colors from the guide.
+# Ink and structure colors.
 .cr_ink <- c(text = "#1E293B", axis = "#333333", muted = "#555555", grid = "#F0F2F5",
              ref = "#718096", edge = "#64748B")
 
@@ -61,7 +61,7 @@ cr_palette <- function(n, palette = NULL) {
   unname(palette[seq_len(n)])
 }
 
-#' Scales in the lab palettes
+#' Scales in the cleanresults palettes
 #'
 #' @param palette Palette name or colors (see [cr_palette()]); `NULL` picks
 #'   the validated default for the number of groups.
