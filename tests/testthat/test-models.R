@@ -9,6 +9,7 @@ model_data <- function(seed = 3) {
 one_per_person <- function(d) d[!duplicated(d$id), ]
 
 test_that("ordinal models match ordinal::clm, with robust SEs and polr alias", {
+  skip_if_not_installed("ordinal")
   p <- one_per_person(model_data())
   res <- clean_regress(p, dvs = c(lik = "ordinal"), predictors = ~ condition + age)
   m <- ordinal::clm(factor(lik, ordered = TRUE) ~ condition + age, data = p)

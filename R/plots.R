@@ -406,12 +406,12 @@ cr_plot_coef <- function(x, dv = NULL, terms = NULL, contrasts = FALSE, inner = 
   g <- ggplot2::ggplot(r, ggplot2::aes(x = .data$estimate, y = .data$ypos, colour = .data$dv_label)) +
     ggplot2::geom_vline(ggplot2::aes(xintercept = .data$null), colour = .cr_ink[["ref"]],
                         linetype = "dashed", linewidth = 0.5) +
-    ggplot2::geom_errorbarh(ggplot2::aes(xmin = .data$conf.low, xmax = .data$conf.high),
-                            height = 0, linewidth = 0.6)
+    ggplot2::geom_errorbar(ggplot2::aes(xmin = .data$conf.low, xmax = .data$conf.high),
+                           orientation = "y", width = 0, linewidth = 0.6)
   if (!is.null(inner) && any(!is.na(r$in_lo))) {
-    g <- g + ggplot2::geom_errorbarh(data = r[!is.na(r$in_lo), , drop = FALSE],
-                                     ggplot2::aes(xmin = .data$in_lo, xmax = .data$in_hi),
-                                     height = 0, linewidth = 1.3)
+    g <- g + ggplot2::geom_errorbar(data = r[!is.na(r$in_lo), , drop = FALSE],
+                                    ggplot2::aes(xmin = .data$in_lo, xmax = .data$in_hi),
+                                    orientation = "y", width = 0, linewidth = 1.3)
   }
   g <- g +
     ggplot2::geom_point(shape = 21, size = 3, fill = "white", stroke = 1.2) +
