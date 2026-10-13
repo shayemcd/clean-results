@@ -1,8 +1,8 @@
 # Builds the documentation site and publishes it to the gh-pages branch.
 # Manual and release-triggered on purpose: GitHub Pages needs a public repo
-# (or a paid plan). After making the repo public, enable Pages under
-# Settings > Pages > Source: "Deploy from a branch" > gh-pages, then run this
-# workflow once from the Actions tab.
+# (or a paid plan). After making the repo public, run this workflow once from
+# the Actions tab (it creates the gh-pages branch), then enable Pages under
+# Settings > Pages > Source: "Deploy from a branch" > gh-pages.
 on:
   release:
     types: [published]
