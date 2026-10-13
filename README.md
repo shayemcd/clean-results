@@ -92,6 +92,14 @@ Version 0.1.0. The tables, text, and figures are tested against `emmeans`,
 suggestions are welcome as
 [issues](https://github.com/shayemcd/clean-results/issues).
 
+## AI assistance
+
+cleanresults was written with substantial help from Claude (Anthropic), used
+through Claude Code, for code, tests, and documentation. Shaye Hopkins
+directed the work, reviewed the changes, and is responsible for the package.
+Its numerical output is tested against independent implementations (see
+[Status](#status)).
+
 ## Citation
 
 ```r

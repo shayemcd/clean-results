@@ -2,7 +2,8 @@ Package: cleanresults
 Title: Publication-Ready Regression Tables, Text, and Figures
 Version: 0.1.0
 Authors@R: person("Shaye", "Hopkins", email = "shaye.mcd@gmail.com",
-    role = c("aut", "cre", "cph"))
+    role = c("aut", "cre", "cph"),
+    comment = c(ORCID = "0000-0002-3560-7393"))
 Description: Fits linear, logistic, count, ordinal, mixed-effects, and
     Bayesian regressions for one or more outcomes and renders a single
     publication-ready table with robust standard errors, explicit reference

@@ -17,11 +17,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Shaye Hopkins \email{shaye.mcd@gmail.com} [copyright holder]
+\strong{Maintainer}: Shaye Hopkins \email{shaye.mcd@gmail.com} (\href{https://orcid.org/0000-0002-3560-7393}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Shaye Hopkins \email{shaye.mcd@gmail.com} [copyright holder]
+  \item Shaye Hopkins \email{shaye.mcd@gmail.com} (\href{https://orcid.org/0000-0002-3560-7393}{ORCID}) [copyright holder]
 }
 
 }
