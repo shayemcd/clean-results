@@ -42,6 +42,7 @@ Suggests:
     glmmTMB,
     brms,
     bayestestR,
+    reformulas,
     rstan,
     svglite
 VignetteBuilder: knitr

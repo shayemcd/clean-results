@@ -279,9 +279,10 @@ test_that("CIs are Bonferroni-adjusted when p-values are", {
 test_that("mixed-model d counts random-slope variance", {
   d <- make_data()
   d$t <- rep(0:3, length.out = nrow(d))
-  res <- suppressMessages(clean_regress(d, dvs = c(trust = "linear"),
-                                        predictors = ~ condition + t,
-                                        random = ~ (1 + t | id)))
+  # the simulated slopes are near-singular, so lme4 warns about convergence
+  res <- suppressWarnings(suppressMessages(
+    clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition + t,
+                  random = ~ (1 + t | id))))
   m <- res$models$trust
   vc <- lme4::VarCorr(m)$id
   zz <- cbind(1, d$t)

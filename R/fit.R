@@ -169,7 +169,14 @@ grouping_factors <- function(model) {
 # Fixed-effects design pieces built from the formula and the analysis data, so
 # every model class (lm to brms) is labelled the same way.
 model_parts <- function(formula, data) {
-  fixed <- if (requireNamespace("lme4", quietly = TRUE)) lme4::nobars(formula) else formula
+  # nobars() moved from lme4 to reformulas; lme4's copy now warns on every call
+  fixed <- if (requireNamespace("reformulas", quietly = TRUE)) {
+    reformulas::nobars(formula)
+  } else if (requireNamespace("lme4", quietly = TRUE)) {
+    lme4::nobars(formula)
+  } else {
+    formula
+  }
   mf <- stats::model.frame(fixed, data)
   tt <- stats::terms(mf)
   X <- stats::model.matrix(tt, mf)
