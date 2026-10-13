@@ -1,14 +1,20 @@
 Package: cleanresults
-Title: Publication-Ready Regression Tables for Multiple Outcomes
+Title: Publication-Ready Regression Tables, Text, and Figures
 Version: 0.1.0
-Authors@R: person("Shaye", email = "shaye.mcd@gmail.com", role = c("aut", "cre"))
-Description: Fits linear, logistic, and mixed-effects regressions for one or
-    more dependent variables and renders a single publication-ready table with
-    robust standard errors, explicit reference categories, pairwise contrasts,
-    and multiple-comparison corrections within factors and across outcomes.
-    Tables render natively in Quarto (HTML, Word, PDF) and export to Word,
-    LaTeX (Overleaf), and HTML that pastes cleanly into Google Docs.
+Authors@R: person("Shaye", "Hopkins", email = "shaye.mcd@gmail.com",
+    role = c("aut", "cre", "cph"))
+Description: Fits linear, logistic, count, ordinal, mixed-effects, and
+    Bayesian regressions for one or more outcomes and renders a single
+    publication-ready table with robust standard errors, explicit reference
+    categories, pairwise contrasts, and multiple-comparison corrections within
+    factors and across outcomes. Builds results text, hypothesis summaries, and
+    figures from the same fitted objects, and checks numbers typed in a
+    manuscript against them. Tables render natively in Quarto (HTML, Word,
+    PDF) and export to Word, LaTeX (Overleaf), and HTML that pastes cleanly
+    into Google Docs.
 License: MIT + file LICENSE
+URL: https://github.com/shayemcd/clean-results
+BugReports: https://github.com/shayemcd/clean-results/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
@@ -24,7 +30,7 @@ Imports:
     officer,
     tools,
     knitr,
-    ggplot2
+    ggplot2 (>= 3.5.0)
 Suggests:
     lme4,
     lmerTest,
@@ -38,4 +44,5 @@ Suggests:
     bayestestR,
     rstan,
     svglite
+VignetteBuilder: knitr
 Config/testthat/edition: 3
