@@ -1,0 +1,226 @@
+# cleanresults
+
+One call fits regressions for several outcomes and gives back one
+publication-ready table, plus the results text and figures that go with
+it, all built from the same fitted objects so the manuscript can’t drift
+from the numbers.
+
+- **Robust SEs by default**: HC3 for lm/logit, and CR2 cluster-robust
+  with Satterthwaite df for mixed models
+- **Reference categories shown as rows**, e.g. `Control (ref.) —`
+- **Pairwise contrasts** (emmeans) with a correction within each factor,
+  and an optional correction across outcomes
+- **An automatic methods note** that says exactly which SEs and
+  corrections were used
+- **Results text**
+  ([`cr_inline()`](https://shayemcd.github.io/clean-results/reference/cr_inline.md),
+  [`cr_sentence()`](https://shayemcd.github.io/clean-results/reference/cr_sentence.md),
+  [`cr_report()`](https://shayemcd.github.io/clean-results/reference/cr_report.md))
+  and a **hypothesis map** that checks each claim against its estimate
+- **Drift checks**:
+  [`cr_verify()`](https://shayemcd.github.io/clean-results/reference/cr_verify.md)
+  compares numbers typed in a manuscript to the results, and
+  [`cr_ground_truth()`](https://shayemcd.github.io/clean-results/reference/cr_ground_truth.md)
+  reports what changed between runs
+- **Figures** as ordinary ggplots: group means with significance
+  brackets, interactions, forest plots, histograms
+
+The same table renders in Quarto (HTML, Word, and PDF), in Overleaf, in
+Word, and in Google Docs.
+
+## Install
+
+``` r
+
+# install.packages("remotes")
+remotes::install_github("shayemcd/clean-results")
+
+# optional, depending on the models you fit
+install.packages(c("lme4", "lmerTest"))       # mixed models
+install.packages(c("ordinal", "glmmTMB"))     # ordinal and negative binomial mixed models
+```
+
+## Quick start
+
+``` r
+
+library(cleanresults)
+
+d <- cr_example_data()        # simulated data, so this runs as is
+
+res <- clean_regress(
+  d,
+  dvs = c(trust = "linear", share = "logistic"),
+  predictors = ~ condition + age,
+  random = ~ (1 | id),                # makes "linear"/"logistic" mixed models
+  contrasts = "condition",            # pairwise contrasts
+  contrast_adjust = "holm",           # correction within factor
+  dv_adjust = "holm",                 # correction across outcomes
+  dv_adjust_terms = "condition",      # ...only for condition rows
+  labels = c(condition = "Condition", age = "Age (years)"),
+  dv_labels = c(trust = "Trust", share = "Shared")
+)
+
+res                                                   # table preview
+cr_save(res, "table1.docx")                           # Word (also .tex, .html, .csv)
+cr_inline(res, "share", "condition", "Loss")          # "OR = 2.39, 97.5% CI [1.10, 5.17], p = .023"
+cr_plot_means(res, "trust", "condition")              # means with significance brackets
+```
+
+In a Quarto or R Markdown document, put `cr_table(res)` in a chunk with
+`#| label: tbl-main` and `#| tbl-cap: "..."`, then cite it with
+`@tbl-main`.
+
+## Learn more
+
+The guides and the function reference are on the [documentation
+site](https://shayemcd.github.io/clean-results/):
+
+| Guide | Covers |
+|----|----|
+| **Getting started** | Model types, table options, contrasts, labels, saving to Word / LaTeX / Google Docs |
+| **Results text that updates itself** | Inline numbers and sentences, hypothesis map, [`cr_verify()`](https://shayemcd.github.io/clean-results/reference/cr_verify.md), [`cr_ground_truth()`](https://shayemcd.github.io/clean-results/reference/cr_ground_truth.md), simple tests and Cohen’s *d* |
+| **Figures** | Means, interactions, forest plots, themes, palettes, export |
+| **Methods defaults** | Exactly which SEs, corrections, and effect sizes are computed |
+
+The same guides are in the package as vignettes
+(`browseVignettes("cleanresults")` when installed with
+`build_vignettes = TRUE`) and in `vignettes/`.
+
+## Status
+
+Version 0.1.0. The tables, text, and figures are tested against
+`emmeans`, `effectsize`, `sandwich`, and the underlying model packages
+(see `tests/testthat/`), but the API may still change before 1.0. Bug
+reports and suggestions are welcome as
+[issues](https://github.com/shayemcd/clean-results/issues).
+
+## AI assistance
+
+cleanresults was written with substantial help from Claude (Anthropic),
+used through Claude Code, for code, tests, and documentation. Shaye
+Hopkins directed the work, reviewed the changes, and is responsible for
+the package. Its numerical output is tested against independent
+implementations (see [Status](#status)).
+
+## Citation
+
+``` r
+
+citation("cleanresults")
+```
+
+or see
+[`CITATION.cff`](https://shayemcd.github.io/clean-results/CITATION.cff).
+
+## License
+
+MIT, see
+[`LICENSE.md`](https://shayemcd.github.io/clean-results/LICENSE.md).
+
+# Package index
+
+## Fit models
+
+- [`clean_regress()`](https://shayemcd.github.io/clean-results/reference/clean_regress.md)
+  : Fit regressions for one or more outcomes and collect
+  publication-ready results
+- [`cr_example_data()`](https://shayemcd.github.io/clean-results/reference/cr_example_data.md)
+  : Simulated example data
+
+## Tables
+
+- [`cr_table()`](https://shayemcd.github.io/clean-results/reference/cr_table.md)
+  : Build a formatted results table
+- [`cr_contrast_table()`](https://shayemcd.github.io/clean-results/reference/cr_contrast_table.md)
+  : Pairwise contrasts as a separate table
+- [`cr_save()`](https://shayemcd.github.io/clean-results/reference/cr_save.md)
+  : Save a results table to Word, LaTeX, HTML, or CSV
+- [`cr_latex()`](https://shayemcd.github.io/clean-results/reference/cr_latex.md)
+  : Render a results table as LaTeX (booktabs + threeparttable)
+- [`cr_flextable()`](https://shayemcd.github.io/clean-results/reference/cr_flextable.md)
+  : Render a results table as a flextable (Word, HTML, PowerPoint)
+- [`cr_tidy()`](https://shayemcd.github.io/clean-results/reference/cr_tidy.md)
+  : Tidy results as a data frame
+- [`cr_rows()`](https://shayemcd.github.io/clean-results/reference/cr_rows.md)
+  : Flatten results into one row per reportable estimate
+- [`clean_label()`](https://shayemcd.github.io/clean-results/reference/clean_label.md)
+  : Clean a variable or level name for display
+
+## Results text
+
+- [`cr_inline()`](https://shayemcd.github.io/clean-results/reference/cr_inline.md)
+  : Report one result in text
+- [`cr_direction()`](https://shayemcd.github.io/clean-results/reference/cr_direction.md)
+  [`cr_sig()`](https://shayemcd.github.io/clean-results/reference/cr_direction.md)
+  : Direction and significance words that update with the results
+- [`cr_sentence()`](https://shayemcd.github.io/clean-results/reference/cr_sentence.md)
+  : Write one result as a sentence
+- [`cr_text_as()`](https://shayemcd.github.io/clean-results/reference/cr_text_as.md)
+  : Re-render report text in another format
+- [`cr_report()`](https://shayemcd.github.io/clean-results/reference/cr_report.md)
+  : Write results paragraphs that rebuild on every render
+
+## Hypotheses and drift checks
+
+- [`cr_hypotheses()`](https://shayemcd.github.io/clean-results/reference/cr_hypotheses.md)
+  : Map hypotheses to results
+- [`cr_h()`](https://shayemcd.github.io/clean-results/reference/cr_h.md)
+  : Point a hypothesis at one result
+- [`cr_expect()`](https://shayemcd.github.io/clean-results/reference/cr_expect.md)
+  : Stop rendering when a claim in your text stops holding
+- [`cr_verify()`](https://shayemcd.github.io/clean-results/reference/cr_verify.md)
+  : Check every number in a manuscript against the results
+- [`cr_ground_truth()`](https://shayemcd.github.io/clean-results/reference/cr_ground_truth.md)
+  : Export every reportable number, model, and hypothesis link
+- [`cr_diff()`](https://shayemcd.github.io/clean-results/reference/cr_diff.md)
+  : What changed between two runs?
+
+## Simple tests and effect sizes
+
+- [`cr_d()`](https://shayemcd.github.io/clean-results/reference/cr_d.md)
+  : Cohen's d for every pair of conditions
+- [`cr_ttest()`](https://shayemcd.github.io/clean-results/reference/cr_ttest.md)
+  : Pairwise t-tests with Cohen's d for every pair of conditions
+- [`cr_chisq()`](https://shayemcd.github.io/clean-results/reference/cr_chisq.md)
+  : Chi-square (or Fisher's exact) tests
+- [`cr_anova()`](https://shayemcd.github.io/clean-results/reference/cr_anova.md)
+  : One-way ANOVA with eta squared
+- [`cr_cor()`](https://shayemcd.github.io/clean-results/reference/cr_cor.md)
+  : Correlations between every pair of variables
+- [`cr_equivalence()`](https://shayemcd.github.io/clean-results/reference/cr_equivalence.md)
+  : Equivalence tests (TOST) for any reported result
+
+## Figures
+
+- [`cr_plot_means()`](https://shayemcd.github.io/clean-results/reference/cr_plot_means.md)
+  : Bar, dot, box, and raincloud plots of group means with significance
+  brackets
+- [`cr_plot_interaction()`](https://shayemcd.github.io/clean-results/reference/cr_plot_interaction.md)
+  : Interaction plots
+- [`cr_plot_coef()`](https://shayemcd.github.io/clean-results/reference/cr_plot_coef.md)
+  : Coefficient (forest) plots
+- [`cr_plot_hist()`](https://shayemcd.github.io/clean-results/reference/cr_plot_hist.md)
+  : Histograms
+- [`theme_cr()`](https://shayemcd.github.io/clean-results/reference/theme_cr.md)
+  : Publication ggplot2 themes
+- [`cr_palette()`](https://shayemcd.github.io/clean-results/reference/cr_palette.md)
+  : Pick colors for n groups
+- [`cr_palettes`](https://shayemcd.github.io/clean-results/reference/cr_palettes.md)
+  : Figure palettes
+- [`scale_fill_cr()`](https://shayemcd.github.io/clean-results/reference/scale_fill_cr.md)
+  [`scale_colour_cr()`](https://shayemcd.github.io/clean-results/reference/scale_fill_cr.md)
+  [`scale_color_cr()`](https://shayemcd.github.io/clean-results/reference/scale_fill_cr.md)
+  : Scales in the cleanresults palettes
+
+# Articles
+
+### Guides
+
+- [Getting started with
+  cleanresults](https://shayemcd.github.io/clean-results/articles/cleanresults.md):
+- [Results text that updates
+  itself](https://shayemcd.github.io/clean-results/articles/results-text.md):
+- [Figures](https://shayemcd.github.io/clean-results/articles/figures.md):
+- [Methods defaults and reporting
+  conventions](https://shayemcd.github.io/clean-results/articles/methods.md):

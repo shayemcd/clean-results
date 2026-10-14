@@ -1,0 +1,12 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  cleanresults: cleanresults.html
+  figures: figures.html
+  methods: methods.html
+  results-text: results-text.html
+last_built: 2026-10-14T07:12Z
+urls:
+  reference: https://shayemcd.github.io/clean-results/reference
+  article: https://shayemcd.github.io/clean-results/articles
