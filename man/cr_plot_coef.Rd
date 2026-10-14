@@ -35,7 +35,7 @@ interval. Not drawn for contrasts whose CIs are multiplicity-adjusted.}
 
 \item{palette}{Palette name or colors.}
 
-\item{style}{Theme style (default \code{"polsci"}, the guide's forest style).}
+\item{style}{Theme style (default \code{"polsci"}, the forest style).}
 
 \item{digits}{Decimal places.}
 }
@@ -44,7 +44,7 @@ A ggplot object.
 }
 \description{
 Dot-and-whisker plot of the estimates in the results table: one row per
-term, outcomes in the lab palette, a dashed line at no effect, a thick
+term, outcomes in the package palette, a dashed line at no effect, a thick
 inner 90\% CI and a thin outer CI at the table's level (the same interval
 the table reports), and the estimate with stars (or the \emph{p}-value) above
 each point. Ratios (OR, IRR) use a log axis.

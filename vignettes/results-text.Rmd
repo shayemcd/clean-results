@@ -1,0 +1,188 @@
+---
+title: "Results text that updates itself"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Results text that updates itself}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+Everything here comes from the same objects as the tables, so prose rebuilt
+on render can't drift from the numbers. We start from one fitted model set.
+
+```{r fit}
+library(cleanresults)
+
+d <- cr_example_data()
+res <- clean_regress(
+  d,
+  dvs = c(trust = "linear", share = "logistic"),
+  predictors = ~ condition + age,
+  random = ~ (1 | id),
+  contrasts = "condition",
+  labels = c(condition = "Condition", age = "Age (years)"),
+  dv_labels = c(trust = "Trust", share = "Shared")
+)
+```
+
+## Numbers, words, and sentences
+
+```{r inline}
+cr_inline(res, "share", "condition", "Loss")
+cr_inline(res, "share", "condition", "Loss", style = "econ")
+cr_inline(res, "trust", "condition", "Gain", stats = c("est", "ci", "p", "es"))  # adds d
+
+cr_direction(res, "share", "condition", "Loss")   # "higher" / "lower"
+cr_sig(res, "share", "condition", "Loss")         # "was" / "was not"
+cr_sentence(res, "share", "condition", "Loss")
+```
+
+In a Quarto or R Markdown document, call these inline:
+
+> Loss framing `r cr_direction(res, "share", "condition", "Loss", words = c("increased", "decreased"))`
+> sharing relative to control, `r cr_inline(res, "share", "condition", "Loss")`.
+
+The source for that sentence is:
+
+``` markdown
+Loss framing `r cr_direction(res, "share", "condition", "Loss", words = c("increased", "decreased"))`
+sharing relative to control, `r cr_inline(res, "share", "condition", "Loss")`.
+```
+
+Use `format = "latex"` for Overleaf and `"plain"` or `"html"` for Google Docs.
+
+Sentences are mechanical by design. They give the direction, whether the
+result was significant (non-significant results get "did not differ
+significantly" wording), and the statistics, never interpretation.
+
+## Hypothesis map and results paragraphs
+
+```{r hyp}
+# a robustness check: refit without the youngest participants
+res_strict <- clean_regress(
+  d[d$age >= 30, ],
+  dvs = c(trust = "linear", share = "logistic"),
+  predictors = ~ condition + age, random = ~ (1 | id), contrasts = "condition",
+  labels = c(condition = "Condition", age = "Age (years)"),
+  dv_labels = c(trust = "Trust", share = "Shared")
+)
+
+hyp <- cr_hypotheses(
+  H1 = cr_h(res, "share", "condition", "Loss", expect = "+",
+            robustness = list("excluding under-30s" = res_strict)),
+  H2 = cr_h(res, "trust", "condition", "Gain", expect = "+"),
+  labels = c(H1 = "Loss framing increases sharing",
+             H2 = "Gain framing increases trust")
+)
+hyp
+```
+
+Each test is listed with its robustness checks and whether its expectation
+was met. In this simulated data H2's expectation is not met, which is what an
+unmet expectation looks like.
+
+```{r report}
+cr_report(hyp)     # one paragraph per hypothesis, robustness checks attached
+```
+
+`cr_report(res)` writes a paragraph for every estimate in a results object
+instead. Save a report for a manuscript with
+`cr_save(cr_report(hyp), "results/h_results.tex")` (for `\input{}` in
+Overleaf) or `"results/h_results.html"` (paste into Google Docs with italics
+intact).
+
+## Guarding against drift
+
+| Risk | Tool |
+|---|---|
+| A hand-written claim ("framing increased sharing") stops being true after a re-run | `cr_expect(res, "share", "condition", "Loss", sign = "+", sig = TRUE)` in a hidden chunk makes the render **fail**; `cr_expect(hyp)` checks every hypothesis with an `expect` |
+| A number typed by hand doesn't match the results | `cr_verify("paper.qmd", res)` checks every typed number (inline R output is skipped because it's correct by construction). Also works on a `.docx` downloaded from Google Docs. `strict = TRUE` fails the render |
+| You changed code or data and don't know which sentences to re-read | `cr_ground_truth(res, hyp, path = "results/ground_truth.json")` on every render prints what changed since last time, flagging **sign flips** and **significance changes**. `cr_diff(old, new)` does the same on demand |
+| An LLM drafts or checks the prose | Give it `cr_ground_truth(..., path = "ground_truth.md")`: every estimate, its exact reported string, models, and the hypothesis map |
+
+### Failing a render when a claim stops being true
+
+```{r expect}
+cr_expect(res, "share", "condition", "Loss", sign = "+", sig = TRUE)
+```
+
+If the claim no longer holds, `cr_expect()` stops with an error, so a stale
+sentence never reaches the manuscript.
+
+### Checking typed numbers
+
+```{r verify}
+tidy <- cr_tidy(res)
+row <- tidy[tidy$dv == "share" & tidy$term == "Loss" & tidy$section == "coefficient", ]
+manuscript <- file.path(tempdir(), "paper.qmd")
+writeLines(c(
+  sprintf("Loss framing raised the odds of sharing (OR = %.2f).", row$estimate),
+  "Trust did not change much (b = 9.99)."   # a number that is not in the results
+), manuscript)
+
+cr_verify(manuscript, res)
+```
+
+`cr_verify()` can tell that a number exists in the results, not that the
+sentence attaches it to the right comparison. That reading check is the LLM's
+(or a co-author's) job, working from the ground-truth export.
+
+### What changed since the last run
+
+`cr_ground_truth()` keys each estimate by the name of the results object, so
+call it on the same object on every render. Add `hyp` as a second argument to
+include the hypothesis map. Here a small model is fitted, exported, and then
+fitted again after the data change:
+
+```{r ground-truth}
+gt_path <- file.path(tempdir(), "ground_truth.json")
+
+res <- clean_regress(d, dvs = c(share = "logistic"), predictors = ~ condition)
+invisible(cr_ground_truth(res, path = gt_path))   # first run: writes the file
+
+# the data change and the document is rendered again: the console reports what moved
+res <- clean_regress(d[d$age >= 30, ], dvs = c(share = "logistic"),
+                     predictors = ~ condition)
+invisible(cr_ground_truth(res, path = gt_path))
+```
+
+A sign flip or a change in significance is flagged separately from a small
+change in an estimate. `cr_diff(old, new)` gives the same comparison on
+demand.
+
+## Simple tests and Cohen's d
+
+The simple-test helpers work on a data frame directly. They assume
+independent observations, so we use one row per person here.
+
+```{r simple}
+p <- d[!duplicated(d$id), ]
+
+cr_d(p, "trust", "condition")                         # every pair of conditions
+cr_d(p, "trust", "condition", pairs = "ref", ref = "Control")
+cr_chisq(p, "share", "condition", pairs = "all")      # chi-square/Fisher, V, pairwise h
+cr_anova(p, "trust", "condition")                     # F, eta squared
+cr_cor(p, c("trust", "score", "age"))                 # every pair
+```
+
+```{r paired}
+# paired t-test, d_z: the same people at two times
+w <- d[d$id %in% levels(d$id)[1:40], ]
+w$time <- rep(c("T1", "T2"), length.out = nrow(w))
+cr_ttest(w[!duplicated(w[c("id", "time")]), ], "trust", "time", id = "id")
+```
+
+Model-based *d* for every contrast in a fitted model: `cr_d(res)`. Add a *d*
+column to a table with `cr_table(res, effect_size = TRUE)`.
+
+All of these work with `cr_inline()`, `cr_sentence()`, `cr_report()`,
+`cr_h()`, `cr_ground_truth()`, and `cr_verify()`. Pairwise *p*-values are
+Holm-adjusted across pairs by default (`adjust`); `dv_adjust` corrects across
+outcomes. When `adjust` is on, CIs (including *d*'s) are Bonferroni-adjusted
+to match and reported as, for example, "98.3% CI" for three pairs, so a CI
+that excludes zero always comes with a significant adjusted *p*. *d*, *g*, and
+*d_z* (with CIs) match the `effectsize` package.
