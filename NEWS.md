@@ -1,3 +1,20 @@
+# cleanresults (development version)
+
+## Bug fixes
+
+* Pairwise contrasts, `cr_plot_means()` brackets and CIs, and
+  `cr_plot_interaction()` CIs now use the CR2 Satterthwaite *df* whenever the
+  coefficients do (all mixed linear models, and lm/logit/Poisson/negative
+  binomial models with `cluster`). Before, `emmeans` received the CR2 matrix
+  but kept the model's own *df* (model-based Satterthwaite for `lmer`,
+  residual *df* for `lm`, *z* for `glm`), so with few clusters these outputs
+  were too liberal and could disagree with the identical coefficient row (for
+  example a bracket showing *** next to a table *p* of .068).
+
+## New
+
+* `cr_table()` notes how many CR2 tests have Satterthwaite *df* below 4.
+
 # cleanresults 0.1.0
 
 First public release.

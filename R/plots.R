@@ -296,6 +296,8 @@ cr_plot_interaction <- function(x, dv, x_var, trace, uncertainty = c("ci", "se",
   if (inherits(x, "clean_results")) {
     em <- model_emmeans(x, dv, c(x_var, trace), at = stats::setNames(list(grid), x_var))
     s <- as.data.frame(summary(em, type = "response", level = conf_level))
+    V <- model_cr2(x, dv)
+    if (!is.null(V)) s <- cr2_summary(s, em, x$models[[dv]], V, conf_level, response = TRUE)
     pl <- prediction_frame(s, c(x_var, trace))
     lab <- results_labeller(x)
     y_lab <- unname(x$settings$dv_labels[dv])
@@ -519,6 +521,15 @@ model_emmeans <- function(x, dv, specs, by = NULL, at = NULL, mode = NULL) {
   suppressMessages(do.call(emmeans::emmeans, args))
 }
 
+# The CR2 matrix for an outcome when its inference uses CR2 Satterthwaite df
+# (so plotted CIs and brackets must too; see robust_df.R), otherwise NULL.
+model_cr2 <- function(x, dv) {
+  V <- x$vcov[[dv]]
+  type <- x$meta[[dv]]$type
+  if (!is_bayes(type) && x$settings$se == "robust" && robust_available(type) && uses_cr2(V)) V
+  else NULL
+}
+
 prediction_frame <- function(s, vars) {
   est <- intersect(c("emmean", "prob", "rate", "response", "mean.class"), names(s))[1]
   lo <- grep("(lower\\.CL|LCL|lower\\.HPD)$", names(s), value = TRUE)[1]
@@ -540,6 +551,8 @@ model_means <- function(x, dv, vars, conf_level) {
   }
   em <- model_emmeans(x, dv, vars, mode = if (type %in% c("ordinal", "ordinal_mixed")) "mean.class")
   s <- as.data.frame(summary(em, type = "response", level = conf_level))
+  V <- model_cr2(x, dv)
+  if (!is.null(V)) s <- cr2_summary(s, em, x$models[[dv]], V, conf_level, response = TRUE)
   mm <- prediction_frame(s, vars)
   for (v in vars) mm[[v]] <- factor(as.character(mm[[v]]),
                                     levels = factor_levels(x$data[[dv]][[v]]) %||%
@@ -597,6 +610,10 @@ model_comparisons <- function(x, dv, compare, groups) {
   em <- model_emmeans(x, dv, compare, by = if (length(groups)) groups else NULL)
   ct <- emmeans::contrast(em, method = "revpairwise", adjust = x$settings$contrast_adjust)
   s <- as.data.frame(summary(ct, infer = c(FALSE, TRUE)))
+  V <- model_cr2(x, dv)
+  if (!is.null(V)) {
+    s <- cr2_summary(s, ct, x$models[[dv]], V, 0.95, adjust = x$settings$contrast_adjust)
+  }
   pr <- match_pairs(as.character(s$contrast), as.character(em@levels[[compare]]))
   out <- data.frame(a = pr$a, b = pr$b, p = s$p.value, stringsAsFactors = FALSE)
   for (g in groups) out[[g]] <- as.character(s[[g]])
