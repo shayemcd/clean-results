@@ -63,6 +63,7 @@ cr_table <- function(x, style = "apa", uncertainty = NULL, p = NULL, layout = NU
   if (auto_note && length(shown$omitted)) {
     note <- c(sprintf("Also controls for: %s.", paste(shown$omitted, collapse = ", ")), note)
   }
+  if (auto_note) note <- c(low_df_note(shown$x), note)
   g <- build_grid(shown$x, spec = spec, digits = digits, p_digits = p_digits,
                   fit = fit, random = random, show_model_type = show_model_type,
                   note = note)
@@ -81,6 +82,23 @@ cr_table <- function(x, style = "apa", uncertainty = NULL, p = NULL, layout = NU
 #' @export
 cr_contrast_table <- function(x, ...) {
   cr_table(x, contrasts = "only", ...)
+}
+
+# CR2 Satterthwaite df below 4 mean the robust test rests on very few
+# effective clusters; Tipton (2015) shows its p-values and CIs are then
+# unreliable. Flag it in the note rather than let a tiny SE pass silently.
+low_df_note <- function(x, threshold = 4) {
+  e <- x$estimates
+  cr2_dvs <- names(Filter(function(m) !is.null(m$cluster) && !isTRUE(m$bayes) &&
+                            m$type %in% c("lm", "logit", "poisson", "negbin", "lmer"),
+                          x$meta))
+  rows <- e[e$dv %in% cr2_dvs & e$row_type %in% c("level", "term") & e$variable != "(Intercept)" & is.finite(e$df) &
+              !is.na(e$estimate), , drop = FALSE]
+  low <- rows$df < threshold
+  if (!any(low)) return(NULL)
+  sprintf(paste("%d of %d tests have CR2 Satterthwaite df below %d (smallest: %.1f);",
+                "their p-values and CIs are unreliable with so few effective clusters."),
+          sum(low), nrow(rows), threshold, min(rows$df[low]))
 }
 
 # Drops the rows of `omit`-matched variables; returns the trimmed results and the

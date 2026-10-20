@@ -22,6 +22,11 @@ pairwise_rows <- function(model, type, data, vars, V, se, adjust, conf_level,
     em <- suppressMessages(do.call(emmeans::emmeans, em_args))
     pr <- emmeans::contrast(em, method = "revpairwise", adjust = if (bayes) "none" else adjust)
     s <- as.data.frame(summary(pr, infer = c(TRUE, TRUE), level = conf_level))
+    # emmeans keeps the model's df even with vcov. = CR2; use the CR2
+    # Satterthwaite df so contrasts match the coefficient rows (robust_df.R).
+    if (!bayes && se == "robust" && uses_cr2(V)) {
+      s <- cr2_summary(s, pr, model, V, conf_level, adjust = adjust)
+    }
     if (bayes) {
       dp <- as.data.frame(bayestestR::describe_posterior(
         pr, centrality = "median", dispersion = TRUE, ci = conf_level, ci_method = "eti",

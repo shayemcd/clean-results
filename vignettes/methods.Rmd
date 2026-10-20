@@ -30,6 +30,13 @@ these applied to that table.
 - **Pairwise contrasts** compare estimated marginal means, averaged over the
   other predictors, using the same covariance matrix as the coefficients.
   `contrast_adjust` adjusts their *p*-values and CIs within each factor.
+  When the coefficients use CR2, contrasts, plotted means, and plot brackets
+  use the CR2 Satterthwaite *df* of each linear combination
+  (`clubSandwich::linear_contrast()`), so a contrast always matches the
+  identical coefficient row. (`emmeans` alone would keep the model's own *df*.)
+- **Few effective clusters:** when any CR2 test has Satterthwaite *df* below
+  4, the table note says how many. Treat those *p*-values and CIs as
+  unreliable (Tipton, 2015).
 - **The across-outcome correction** (`dv_adjust`) treats each row as one
   family across outcomes, and widens those rows' CIs to match (Bonferroni
   across the outcomes, on top of any within-factor adjustment). Text output
