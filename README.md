@@ -94,10 +94,7 @@ suggestions are welcome as
 
 ## AI assistance
 
-cleanresults was written with substantial help from Claude (Anthropic), used
-through Claude Code, for code, tests, and documentation. Shaye Hopkins
-directed the work, reviewed the changes, and is responsible for the package.
-Its numerical output is tested against independent implementations (see
+Built with Claude Code.Its numerical output is tested against independent implementations (see
 [Status](#status)).
 
 ## Citation
