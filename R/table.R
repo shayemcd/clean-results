@@ -4,6 +4,10 @@
 #' Quarto/R Markdown (HTML, Word, and PDF), and can be passed to [cr_save()].
 #' Printing a `clean_results` object directly uses the defaults below.
 #'
+#' Fixed-effect terms are ordered by how many models include them, most first.
+#' Ties retain their first appearance across the models. The intercept stays
+#' first when shown, and each factor's rows stay together.
+#'
 #' Start from a `style` preset and override any piece:
 #'
 #' | style | uncertainty | p | layout |

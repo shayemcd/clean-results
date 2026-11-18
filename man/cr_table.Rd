@@ -73,6 +73,10 @@ Quarto/R Markdown (HTML, Word, and PDF), and can be passed to \code{\link[=cr_sa
 Printing a \code{clean_results} object directly uses the defaults below.
 }
 \details{
+Fixed-effect terms are ordered by how many models include them, most first.
+Ties retain their first appearance across the models. The intercept stays
+first when shown, and each factor's rows stay together.
+
 Start from a \code{style} preset and override any piece:\tabular{llll}{
    style \tab uncertainty \tab p \tab layout \cr
    \code{"apa"} (default) \tab \code{"ci"} \tab \code{"value"} \tab \code{"columns"} \cr
