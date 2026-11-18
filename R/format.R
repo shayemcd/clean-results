@@ -90,6 +90,13 @@ build_grid <- function(x, spec = table_spec(), digits = 2, p_digits = 3,
 
   emit_section <- function(sec) {
     sub <- est[est$section == sec, , drop = FALSE]
+    if (sec == "fixed" && length(dvs) > 1L) {
+      # Count each model once per term, including terms with missing estimates.
+      term_models <- unique(sub[c("variable", "dv")])
+      coverage <- table(term_models$variable)
+      term_order <- match(sub$variable, unique(sub$variable))
+      sub <- sub[order(-as.integer(coverage[sub$variable]), term_order), , drop = FALSE]
+    }
     keys <- unique(sub$key)
     keys <- c(intersect("(Intercept)", keys), setdiff(keys, "(Intercept)"))
     for (k in keys) {
