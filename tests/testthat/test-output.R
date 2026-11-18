@@ -52,6 +52,22 @@ test_that("cr_inline reports APA strings", {
   expect_error(cr_inline(res, "trust", "condition", "Control"), "reference")
 })
 
+test_that("fixed effects are ordered by model coverage with factor rows together", {
+  res <- clean_regress(make_data(), dvs = c(trust = "lm", score = "lm", share = "logit"),
+                       formulas = list(trust = trust ~ female + age + condition,
+                                       score = score ~ age + condition,
+                                       share = share ~ condition),
+                       se = "model")
+  labels <- function(tab) vapply(tab$grid$rows, `[[`, "", "label")
+  tab <- cr_table(res, fit = FALSE)
+  expect_identical(labels(tab),
+                   c("Intercept", "Condition", "Control (ref.)", "Gain", "Loss",
+                     "Age", "Female"))
+  expect_identical(tab$results$estimates, res$estimates)
+  expect_identical(labels(cr_table(res, fit = FALSE, omit = "^condition$")),
+                   c("Intercept", "Age", "Female"))
+})
+
 test_that("omit hides matched rows from the table and lists them in the note", {
   res <- res_fixture()
   full <- cr_table(res)
