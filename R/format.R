@@ -285,9 +285,18 @@ table_notes <- function(x, spec, note = NULL) {
                           which_txt, adjust_name(x$settings$dv_adjust), length(dvs)))
   }
   if (spec$effect_size && any(!is.na(x$estimates$es))) {
-    out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
-                        "within-group SD of the outcome (linear models) or the total SD of one",
-                        "observation, residual plus random-effect variance (linear mixed models)."))
+    d_dvs <- unique(x$estimates$dv[!is.na(x$estimates$es)])
+    d_types <- vapply(x$meta[d_dvs], function(m) as.character(m$type)[1], "")
+    if (any(d_types %in% c("lm", "lmer"))) {
+      out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
+                          "within-group SD of the outcome (linear models) or the total SD of one",
+                          "observation, residual plus random-effect variance (linear mixed models)."))
+    }
+    if (any(d_types %in% c("logit", "glmer", "ordinal", "ordinal_mixed"))) {
+      out <- c(out, paste("For logistic and ordinal models, d = ln(OR) divided by the SD of the latent",
+                          "logistic response, \u03c0/\u221a3 (Chinn, 2000), plus the random-effect variance",
+                          "in mixed models."))
+    }
   }
   if (spec$stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
   c(paste("Note.", paste(out, collapse = " ")), note)

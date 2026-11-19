@@ -14,6 +14,12 @@
 ## New
 
 * `cr_table()` notes how many CR2 tests have Satterthwaite *df* below 4.
+* Model-based *d* (`cr_d()`, `cr_table(effect_size = TRUE)`) now covers logistic
+  and ordinal (cumulative logit) models, for factor levels and contrasts. *d* is
+  the log odds ratio divided by the latent logistic SD, \eqn{\pi/\sqrt{3}}
+  (Chinn, 2000); mixed models (`glmer`, `clmm`) add the random-effect variance,
+  as for linear mixed models. Other links and Poisson / negative binomial models
+  have no *d*. CIs follow the estimate when adjusted across outcomes.
 
 # cleanresults 0.1.0
 

@@ -21,5 +21,9 @@ For a data frame, the same as \code{\link[=cr_ttest]{cr_ttest()}}. For \code{\li
 returns the model-based standardized differences: each factor level versus
 the reference and every pairwise contrast, divided by the pooled
 within-group SD of the outcome (\code{lm}) or the total SD (\code{lmer}), with CIs
-from the same robust SEs.
+from the same robust SEs. For logistic and ordinal (cumulative logit)
+models, \emph{d} is the log odds ratio divided by the SD of the latent logistic
+response, \eqn{\pi/\sqrt{3}} (Chinn, 2000); in mixed models the
+random-effect variance is added to that variance, giving the latent
+total-variance scale (Snijders & Bosker, 2012; Nakagawa & Schielzeth, 2013).
 }

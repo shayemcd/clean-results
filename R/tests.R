@@ -213,7 +213,11 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
 #' returns the model-based standardized differences: each factor level versus
 #' the reference and every pairwise contrast, divided by the pooled
 #' within-group SD of the outcome (`lm`) or the total SD (`lmer`), with CIs
-#' from the same robust SEs.
+#' from the same robust SEs. For logistic and ordinal (cumulative logit)
+#' models, *d* is the log odds ratio divided by the SD of the latent logistic
+#' response, \eqn{\pi/\sqrt{3}} (Chinn, 2000); in mixed models the
+#' random-effect variance is added to that variance, giving the latent
+#' total-variance scale (Snijders & Bosker, 2012; Nakagawa & Schielzeth, 2013).
 #'
 #' @param x A data frame or a `clean_results` object.
 #' @param ... For data frames, arguments to [cr_ttest()]. For results, `dv`
@@ -231,7 +235,7 @@ cr_d.clean_results <- function(x, dv = NULL, variable = NULL, pairs = "all", ...
   r <- cr_rows(x)
   r <- r[!is.na(r$es), , drop = FALSE]
   if (!nrow(r)) {
-    stop("No standardized differences: d is available for linear (lm/lmer) models with factors.",
+    stop("No standardized differences: d is available for linear, logistic, and ordinal models with factors.",
          call. = FALSE)
   }
   if (!is.null(dv)) r <- r[r$dv %in% dv | r$dv_label %in% dv, , drop = FALSE]
