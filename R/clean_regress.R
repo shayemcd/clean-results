@@ -29,6 +29,11 @@
 #' @param cluster Column name to cluster robust SEs on. Defaults to the first
 #'   grouping factor for mixed models and to none (HC3) for lm/logit.
 #' @param se `"robust"` (default; HC3, or CR2 when clustered or mixed) or `"model"`.
+#' @param vcov_type Heteroskedasticity-consistent estimator for robust SEs
+#'   without clustering (lm, logistic, Poisson, negative binomial): one of
+#'   `"HC3"` (default), `"HC1"`, `"HC0"`, `"HC2"`, `"HC4"`, passed to
+#'   [sandwich::vcovHC()]. Ignored when `se = "model"`, and for clustered and
+#'   mixed models, which use CR2. The table's methods note names the estimator.
 #' @param contrasts Pairwise contrasts: `NULL` (none), `TRUE` (every factor
 #'   predictor with 3+ levels), or a character vector of factor names.
 #' @param contrast_adjust Correction across the pairwise contrasts of each factor
@@ -82,6 +87,7 @@
 #' }
 clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas = NULL,
                           type = NULL, cluster = NULL, se = c("robust", "model"),
+                          vcov_type = c("HC3", "HC1", "HC0", "HC2", "HC4"),
                           contrasts = NULL, contrast_adjust = "holm",
                           dv_adjust = "none", dv_adjust_terms = NULL,
                           exponentiate = TRUE, conf_level = 0.95,
@@ -90,6 +96,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
                           baseline = NULL, lin = NULL, contrast_by = NULL,
                           fit_args = list()) {
   se <- match.arg(se)
+  vcov_type <- match.arg(vcov_type)
   if (!is.data.frame(data)) stop("`data` must be a data frame.", call. = FALSE)
   dv_adjust <- match.arg(dv_adjust, stats::p.adjust.methods)
   dvs <- normalize_dvs(dvs, type)
@@ -134,7 +141,11 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
       stop(sprintf("Variables not found in `data`: %s", paste(missing_vars, collapse = ", ")),
            call. = FALSE)
     }
-    d_i <- data[stats::complete.cases(data[vars]), , drop = FALSE]
+    ok <- stats::complete.cases(data[vars])
+    # Non-finite numeric outcomes (e.g. a percent change from a zero baseline) are
+    # dropped like missing values; lm() would stop on them
+    if (is.numeric(data[[dv]])) ok <- ok & is.finite(data[[dv]])
+    d_i <- data[ok, , drop = FALSE]
     # Baseline centered in each model's own analysis sample, so the treatment
     # coefficients are effects at the mean baseline (ANCOVA; Lin, 2013 with `lin`)
     if (has_base) d_i$.baseline <- d_i[[base_col]] - mean(d_i[[base_col]])
@@ -145,7 +156,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     if (is.null(cluster_name) && is_mixed(mtype)) cluster_name <- grouping_factors(m)[1]
     cluster_vec <- if (!is.null(cluster_name)) d_i[[cluster_name]] else NULL
 
-    V <- model_vcov(m, mtype, se, cluster_vec)
+    V <- model_vcov(m, mtype, se, cluster_vec, vcov_type)
     coefs <- infer_coefs(m, mtype, se, V, conf_level)
     map <- term_map(parts, lab_fun = lab_fun, intercept = intercept && !is_ordinal(mtype))
     fixed <- merge(map, coefs, by = "term", all.x = TRUE, sort = FALSE)
@@ -184,7 +195,8 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
       bayes = is_bayes(mtype), baseline = if (has_base) base_col else NULL,
       cluster = if (robust_available(mtype) && se == "robust") cluster_name else NULL,
       se_text = se_method_text(mtype, se,
-                               if (!is.null(cluster_name)) lab_fun$var(cluster_name)),
+                               if (!is.null(cluster_name)) lab_fun$var(cluster_name),
+                               vcov_type),
       robust_fallback = se == "robust" && !robust_available(mtype) && !is_bayes(mtype),
       contrast_vars = cvars, contrast_by = contrast_by, n = nrow(parts$mf)
     )
