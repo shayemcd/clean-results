@@ -284,20 +284,7 @@ table_notes <- function(x, spec, note = NULL) {
     out <- c(out, sprintf("%s are additionally %s-adjusted across the %d outcomes.",
                           which_txt, adjust_name(x$settings$dv_adjust), length(dvs)))
   }
-  if (spec$effect_size && any(!is.na(x$estimates$es))) {
-    d_dvs <- unique(x$estimates$dv[!is.na(x$estimates$es)])
-    d_types <- vapply(x$meta[d_dvs], function(m) as.character(m$type)[1], "")
-    if (any(d_types %in% c("lm", "lmer"))) {
-      out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
-                          "within-group SD of the outcome (linear models) or the total SD of one",
-                          "observation, residual plus random-effect variance (linear mixed models)."))
-    }
-    if (any(d_types %in% c("logit", "glmer", "ordinal", "ordinal_mixed"))) {
-      out <- c(out, paste("For logistic and ordinal models, d = ln(OR) divided by the SD of the latent",
-                          "logistic response, \u03c0/\u221a3 (Chinn, 2000), plus the random-effect variance",
-                          "in mixed models."))
-    }
-  }
+  if (spec$effect_size) out <- c(out, d_note(x))
   if (spec$stars) out <- c(out, "* p < .05. ** p < .01. *** p < .001.")
   c(paste("Note.", paste(out, collapse = " ")), note)
 }
@@ -306,4 +293,29 @@ grid_matrix <- function(g) {
   lab <- vapply(g$rows, `[[`, "", "label")
   cells <- do.call(rbind, lapply(g$rows, `[[`, "cells"))
   cbind(lab, cells)
+}
+
+# The sentence(s) explaining how each kind of d in `x` was calculated; empty when `x` reports no d.
+# One source for the table note and cr_d_note().
+d_note <- function(x, dvs = NULL) {
+  es <- x$estimates$es
+  if (is.null(es) || all(is.na(es))) return(character())
+  d_dvs <- unique(x$estimates$dv[!is.na(es)])
+  if (!is.null(dvs)) d_dvs <- intersect(d_dvs, dvs)
+  d_types <- vapply(x$meta[d_dvs], function(m) as.character(m$type)[1], "")
+  out <- character()
+  if (any(d_types %in% c("lm", "lmer"))) {
+    out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
+                        "within-group SD of the outcome (linear models) or the total SD of one",
+                        "observation, residual plus random-effect variance (linear mixed models)."))
+  }
+  if (any(d_types %in% c("logit", "glmer", "ordinal", "ordinal_mixed"))) {
+    mixed <- any(d_types %in% c("glmer", "ordinal_mixed"))
+    out <- c(out, paste0(
+      "For logistic and ordinal models, d = ln(OR) divided by the SD of the latent logistic response, ",
+      "\u03c0/\u221a3 (Chinn, 2000)",
+      if (mixed) ", plus the random-effect variance for mixed models, so d is on the total-variance scale" else "",
+      "; it is an approximation, and the odds ratio is the primary effect size."))
+  }
+  out
 }

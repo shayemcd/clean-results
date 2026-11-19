@@ -225,3 +225,30 @@ test_that("d is left empty for models without a defined standardized difference"
   expect_true(all(is.na(pm$estimates$es)))
   expect_error(cr_d(pm), "linear, logistic, and ordinal")
 })
+
+test_that("the d note describes only the kinds of d that are shown, and travels with cr_d()", {
+  p <- one_per_person(model_data())
+  lg <- clean_regress(p, dvs = c(share = "logistic"), predictors = ~ condition)
+  note <- cr_d_note(lg)
+  expect_length(note, 1)
+  expect_match(note, "Chinn, 2000", fixed = TRUE)
+  expect_match(note, "approximation")
+  expect_false(grepl("random-effect", note))             # fixed-effects logit: no mixed-model clause
+  expect_false(grepl("pooled within-group", note))       # and no linear-model sentence
+  expect_equal(attr(cr_d(lg, dv = "share", pairs = "ref"), "note"), note)
+  # a table note appears only when the d column is requested
+  expect_false(grepl("Chinn", paste(cr_table(lg)$grid$notes, collapse = " ")))
+  expect_match(paste(cr_table(lg, effect_size = TRUE)$grid$notes, collapse = " "), "Chinn")
+  # linear and logistic together: both sentences; the dv filter narrows it
+  both <- clean_regress(p, dvs = c(trust = "linear", share = "logistic"), predictors = ~ condition)
+  expect_match(cr_d_note(both), "pooled within-group")
+  expect_match(cr_d_note(both), "Chinn")
+  expect_false(grepl("Chinn", cr_d_note(both, dv = "trust")))
+  # no d, no note
+  num <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ age)
+  expect_length(cr_d_note(num), 0)
+  expect_error(cr_d_note(mtcars), "clean_results")
+  skip_if_not_installed("lme4")
+  mm <- clean_regress(model_data(), dvs = c(share = "logistic"), predictors = ~ condition, random = ~ (1 | id))
+  expect_match(cr_d_note(mm), "random-effect variance for mixed models")
+})

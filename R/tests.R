@@ -223,7 +223,8 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
 #' @param ... For data frames, arguments to [cr_ttest()]. For results, `dv`
 #'   and `variable` to filter, and `pairs` (`"all"` contrasts, `"ref"`
 #'   levels versus the reference, or `"A vs. B"` strings).
-#' @return A `cr_tests` object (data) or a data frame (results).
+#' @return A `cr_tests` object (data) or a data frame (results), which carries
+#'   how *d* was calculated as `attr(, "note")` (see [cr_d_note()]).
 #' @export
 cr_d <- function(x, ...) UseMethod("cr_d")
 
@@ -251,12 +252,36 @@ cr_d.clean_results <- function(x, dv = NULL, variable = NULL, pairs = "all", ...
   } else {
     r <- r[r$level %in% pairs | r$level_label %in% pairs, , drop = FALSE]
   }
+  note <- d_note(x, unique(r$dv))
   r <- r[, c("dv_label", "variable_label", "level_label", "estimate", "es", "es.low", "es.high",
              "p.value", "adjustment")]
   names(r) <- c("outcome", "variable", "comparison", "difference", "d", "d.low", "d.high",
                 "p.value", "adjustment")
   rownames(r) <- NULL
+  attr(r, "note") <- note
   r
+}
+
+#' How the standardized differences (d) were calculated
+#'
+#' The note that belongs with any d reported from [clean_regress()] results:
+#' [cr_table()] adds it to its table note automatically when it shows a d
+#' column. Use this where d appears outside a table, in prose or a figure
+#' caption, and when quoting `cr_d()` or `cr_sentence(stats = "es")` output.
+#' `cr_d()` also carries it as `attr(, "note")`.
+#'
+#' @param x A `clean_results` object.
+#' @param dv Optional outcome names, to describe only the d's for those
+#'   outcomes.
+#' @return A single string, or `character(0)` when the results report no d.
+#' @examples
+#' res <- clean_regress(mtcars, dvs = c(mpg = "linear"), predictors = ~ factor(cyl))
+#' cr_d_note(res)
+#' @export
+cr_d_note <- function(x, dv = NULL) {
+  if (!inherits(x, "clean_results")) stop("`x` must be a clean_results object.", call. = FALSE)
+  note <- d_note(x, dv)
+  if (length(note)) paste(note, collapse = " ") else character()
 }
 
 #' Chi-square (or Fisher's exact) tests
