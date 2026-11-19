@@ -13,6 +13,13 @@
 
 ## New
 
+* `clean_regress()` gains `vcov_type` to choose the heteroskedasticity-consistent
+  estimator (`"HC3"` by default, or `"HC1"`, `"HC0"`, `"HC2"`, `"HC4"`) for
+  unclustered robust SEs; the table note names the estimator used. Clustered and
+  mixed models still use CR2.
+* `clean_regress()` drops rows whose numeric outcome is `Inf` or `-Inf` (for
+  example a percent change from a zero baseline), as it already did for `NA`,
+  instead of letting `lm()` stop with an error.
 * `cr_table()` notes how many CR2 tests have Satterthwaite *df* below 4.
 
 # cleanresults 0.1.0

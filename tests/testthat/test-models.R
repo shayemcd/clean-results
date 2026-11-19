@@ -158,3 +158,11 @@ test_that("model calls refer to the data by name instead of inlining it", {
   # the data can still be recovered from the model, as emmeans and update() need
   expect_s4_class(emmeans::emmeans(res$models$trust, ~ condition), "emmGrid")
 })
+
+test_that("non-finite numeric outcomes are dropped like missing values", {
+  d <- make_data()
+  d$score[c(3, 10)] <- c(Inf, -Inf)
+  d$score[5] <- NA
+  res <- clean_regress(d, dvs = c(score = "linear"), predictors = ~ condition + age)
+  expect_equal(res$meta$score$n, nrow(d) - 3L)
+})

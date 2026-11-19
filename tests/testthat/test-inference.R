@@ -73,3 +73,19 @@ test_that("an across-outcome correction over linear and logistic outcomes does n
                   dv_adjust_terms = "condition")
   )
 })
+
+test_that("vcov_type selects the HC estimator for unclustered robust SEs", {
+  d <- make_data()
+  res <- clean_regress(d, dvs = c(score = "linear"), predictors = ~ condition + age,
+                       vcov_type = "HC1")
+  m <- lm(score ~ condition + age, data = d)
+  se <- sqrt(diag(sandwich::vcovHC(m, type = "HC1")))
+  tt <- cr_tidy(res)
+  got <- tt$std.error[match(names(se), tt$term)]
+  expect_equal(unname(got), unname(se), tolerance = 1e-8)
+  expect_match(res$meta$score$se_text, "HC1 robust SEs")
+  default <- clean_regress(d, dvs = c(score = "linear"), predictors = ~ condition + age)
+  expect_match(default$meta$score$se_text, "HC3 robust SEs")
+  expect_error(clean_regress(d, dvs = c(score = "linear"), predictors = ~ condition,
+                             vcov_type = "HC9"))
+})
