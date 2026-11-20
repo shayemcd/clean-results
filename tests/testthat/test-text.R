@@ -24,7 +24,11 @@ test_that("cr_rows gives one schema with groups and d", {
   ns <- table(d$condition); vs <- tapply(d$trust, d$condition, var)
   sp <- sqrt(sum((ns - 1) * vs) / (sum(ns) - length(ns)))
   expect_equal(lv$es, lv$estimate / sp)
-  expect_true(all(is.na(r$es[r$dv == "share"])))
+  # logistic mixed: ln(OR) over the latent logistic SD plus the random-intercept variance
+  sh <- r[r$dv == "share" & r$section == "fixed" & r$level %in% "Gain", ]
+  sdv <- sqrt(pi^2 / 3 + as.numeric(lme4::VarCorr(res$models$share)$id))
+  expect_equal(sh$es, log(sh$estimate) / sdv)
+  expect_true(all(is.na(r$es[r$dv == "share" & is.na(r$level)])))   # no d for intercept or continuous terms
 })
 
 test_that("cr_inline supports APA, econ, and effect sizes", {
@@ -138,10 +142,13 @@ test_that("paired t-test uses d_z", {
 
 test_that("d from models filters pairs", {
   res <- res_text()
-  all <- cr_d(res)
+  all <- cr_d(res, dv = "trust")
   expect_equal(nrow(all), 3)
-  expect_equal(nrow(cr_d(res, pairs = "ref")), 2)
-  expect_equal(cr_d(res, pairs = "Loss vs. Gain")$comparison, "Loss vs. Gain")
+  expect_equal(nrow(cr_d(res, dv = "trust", pairs = "ref")), 2)
+  expect_equal(cr_d(res, dv = "trust", pairs = "Loss vs. Gain")$comparison, "Loss vs. Gain")
+  # both outcomes: the logistic one gets its latent-scale d as well
+  expect_equal(nrow(cr_d(res)), 6)
+  expect_equal(sort(unique(cr_d(res)$outcome)), sort(unname(res$settings$dv_labels)))
 })
 
 test_that("chi-square, ANOVA, and correlations report correctly", {

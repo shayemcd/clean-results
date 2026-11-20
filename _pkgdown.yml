@@ -44,6 +44,7 @@ reference:
   - title: Simple tests and effect sizes
     contents:
       - cr_d
+      - cr_d_note
       - cr_ttest
       - cr_chisq
       - cr_anova

@@ -21,6 +21,15 @@
   example a percent change from a zero baseline), as it already did for `NA`,
   instead of letting `lm()` stop with an error.
 * `cr_table()` notes how many CR2 tests have Satterthwaite *df* below 4.
+* Model-based *d* (`cr_d()`, `cr_table(effect_size = TRUE)`) now covers logistic
+  and ordinal (cumulative logit) models, for factor levels and contrasts. *d* is
+  the log odds ratio divided by the latent logistic SD, \eqn{\pi/\sqrt{3}}
+  (Chinn, 2000); mixed models (`glmer`, `clmm`) add the random-effect variance,
+  as for linear mixed models. Other links and Poisson / negative binomial models
+  have no *d*. CIs follow the estimate when adjusted across outcomes.
+* The table note now describes only the kinds of *d* the table shows, and says the
+  logistic/ordinal *d* is an approximation. New `cr_d_note()` returns the same note
+  for *d* reported in prose or figures; `cr_d()` carries it as `attr(, "note")`.
 
 # cleanresults 0.1.0
 

@@ -159,6 +159,100 @@ test_that("model calls refer to the data by name instead of inlining it", {
   expect_s4_class(emmeans::emmeans(res$models$trust, ~ condition), "emmGrid")
 })
 
+test_that("d for logistic and ordinal models is ln(OR) over the latent logistic SD", {
+  sd0 <- sqrt(pi^2 / 3)
+  p <- one_per_person(model_data())
+  # logit: log OR / (pi / sqrt(3)), with the CI moved the same way
+  lg <- clean_regress(p, dvs = c(share = "logistic"), predictors = ~ condition + age,
+                      contrasts = "condition", contrast_adjust = "none")
+  r <- cr_find(lg, "share", "condition", "Loss")
+  expect_equal(r$es, log(r$estimate) / sd0)
+  expect_equal(c(r$es.low, r$es.high), log(c(r$conf.low, r$conf.high)) / sd0)
+  d <- cr_d(lg, dv = "share")
+  expect_true(all(c("Loss vs. Control", "Gain vs. Control", "Loss vs. Gain") %in% d$comparison))
+  expect_equal(d$d[d$comparison == "Loss vs. Control"], r$es)
+  # the reference row, intercept, and continuous terms get no d
+  expect_true(is.na(cr_find(lg, "share", "age")$es))
+  # unexponentiated estimates are already log odds
+  raw <- clean_regress(p, dvs = c(share = "logistic"), predictors = ~ condition, exponentiate = FALSE)
+  rr <- cr_find(raw, "share", "condition", "Loss")
+  expect_equal(rr$es, rr$estimate / sd0)
+  # the table shows a d column and says how it was computed
+  tab <- cr_table(lg, effect_size = TRUE)
+  expect_true("es" %in% tab$grid$spec$cols)
+  expect_match(paste(tab$grid$notes, collapse = " "), "latent")
+  # a Bonferroni widening across outcomes keeps d consistent with the estimate's CI
+  two <- clean_regress(p, dvs = c(share = "logistic", bought = "logistic"), predictors = ~ condition,
+                       dv_adjust = "bonferroni")
+  r2 <- cr_find(two, "share", "condition", "Loss")
+  expect_equal(c(r2$es, r2$es.low, r2$es.high), log(c(r2$estimate, r2$conf.low, r2$conf.high)) / sd0)
+})
+
+test_that("d for mixed logistic models adds the random-effect variance", {
+  skip_if_not_installed("lme4")
+  m <- clean_regress(model_data(), dvs = c(share = "logistic"), predictors = ~ condition,
+                     random = ~ (1 | id))
+  r <- cr_find(m, "share", "condition", "Loss")
+  fit <- m$models$share
+  sdv <- sqrt(pi^2 / 3 + as.numeric(lme4::VarCorr(fit)$id))
+  expect_equal(r$es, log(r$estimate) / sdv)
+  # smaller than the fixed-effects version, because the latent variance is larger
+  expect_lt(abs(r$es), abs(log(r$estimate)) / sqrt(pi^2 / 3))
+})
+
+test_that("d for ordinal models, fixed and mixed (with a random slope)", {
+  skip_if_not_installed("ordinal")
+  sd0 <- sqrt(pi^2 / 3)
+  p <- one_per_person(model_data())
+  o <- clean_regress(p, dvs = c(lik = "ordinal"), predictors = ~ condition + age)
+  r <- cr_find(o, "lik", "condition", "Gain")
+  expect_equal(r$es, log(r$estimate) / sd0)
+  dd <- model_data()
+  dd$x <- as.numeric(scale(dd$age))
+  om <- suppressWarnings(clean_regress(dd, dvs = c(lik = "ordinal"), predictors = ~ condition + x,
+                                       random = ~ (1 + x | id)))
+  fit <- om$models$lik
+  Sigma <- as.matrix(ordinal::VarCorr(fit)$id)
+  Z <- cbind(`(Intercept)` = 1, x = dd$x[stats::complete.cases(dd[c("lik", "condition", "x", "id")])])
+  extra <- mean(rowSums((Z %*% Sigma[colnames(Z), colnames(Z)]) * Z))
+  rm_ <- cr_find(om, "lik", "condition", "Gain")
+  expect_equal(rm_$es, log(rm_$estimate) / sqrt(pi^2 / 3 + extra), tolerance = 1e-6)
+})
+
+test_that("d is left empty for models without a defined standardized difference", {
+  p <- one_per_person(model_data())
+  pm <- clean_regress(p, dvs = c(days = "poisson"), predictors = ~ condition)
+  expect_true(all(is.na(pm$estimates$es)))
+  expect_error(cr_d(pm), "linear, logistic, and ordinal")
+})
+
+test_that("the d note describes only the kinds of d that are shown, and travels with cr_d()", {
+  p <- one_per_person(model_data())
+  lg <- clean_regress(p, dvs = c(share = "logistic"), predictors = ~ condition)
+  note <- cr_d_note(lg)
+  expect_length(note, 1)
+  expect_match(note, "Chinn, 2000", fixed = TRUE)
+  expect_match(note, "approximation")
+  expect_false(grepl("random-effect", note))             # fixed-effects logit: no mixed-model clause
+  expect_false(grepl("pooled within-group", note))       # and no linear-model sentence
+  expect_equal(attr(cr_d(lg, dv = "share", pairs = "ref"), "note"), note)
+  # a table note appears only when the d column is requested
+  expect_false(grepl("Chinn", paste(cr_table(lg)$grid$notes, collapse = " ")))
+  expect_match(paste(cr_table(lg, effect_size = TRUE)$grid$notes, collapse = " "), "Chinn")
+  # linear and logistic together: both sentences; the dv filter narrows it
+  both <- clean_regress(p, dvs = c(trust = "linear", share = "logistic"), predictors = ~ condition)
+  expect_match(cr_d_note(both), "pooled within-group")
+  expect_match(cr_d_note(both), "Chinn")
+  expect_false(grepl("Chinn", cr_d_note(both, dv = "trust")))
+  # no d, no note
+  num <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ age)
+  expect_length(cr_d_note(num), 0)
+  expect_error(cr_d_note(mtcars), "clean_results")
+  skip_if_not_installed("lme4")
+  mm <- clean_regress(model_data(), dvs = c(share = "logistic"), predictors = ~ condition, random = ~ (1 | id))
+  expect_match(cr_d_note(mm), "random-effect variance for mixed models")
+})
+
 test_that("non-finite numeric outcomes are dropped like missing values", {
   d <- make_data()
   d$score[c(3, 10)] <- c(Inf, -Inf)

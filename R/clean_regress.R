@@ -181,7 +181,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     est <- rbind(fixed[, names(ctr %||% fixed)], ctr)
     est$log_scale <- exp_i
     est$ci_level <- ci_levels(est, conf_level)
-    est <- add_std_diff(est, m, mtype)
+    est <- add_std_diff(est, m, mtype, d_i)
     est$dv <- dv
     est$p.within <- est$p.value
     est_list[[dv]] <- est
@@ -319,11 +319,12 @@ rescale_ci <- function(r, new_level) {
                r$estimate - (r$estimate - r$conf.low) * k)
   hi <- ifelse(log_scale, r$estimate * (r$conf.high / r$estimate)^k,
                r$estimate + (r$conf.high - r$estimate) * k)
-  if ("es" %in% names(r)) {
-    has_es <- ok & !is.na(r$es) & r$estimate != 0
-    sd_ratio <- r$es / r$estimate
-    r$es.low[has_es] <- (lo * sd_ratio)[has_es]
-    r$es.high[has_es] <- (hi * sd_ratio)[has_es]
+  if (all(c("es", "es_sd") %in% names(r))) {
+    # d is the (log) estimate over the SD that standardized it, so move its CI with the estimate's
+    has_es <- ok & !is.na(r$es) & !is.na(r$es_sd)
+    lg <- function(x) suppressWarnings(log(x))   # only the log-scale (OR) rows use it
+    r$es.low[has_es] <- (ifelse(log_scale, lg(lo), lo) / r$es_sd)[has_es]
+    r$es.high[has_es] <- (ifelse(log_scale, lg(hi), hi) / r$es_sd)[has_es]
   }
   r$conf.low[ok] <- lo[ok]
   r$conf.high[ok] <- hi[ok]
@@ -331,7 +332,7 @@ rescale_ci <- function(r, new_level) {
   r
 }
 
-# Standardized mean differences (Cohen's d) for linear models.
+# Standardized differences (Cohen's d) for linear, logistic, and ordinal models.
 # lm: the difference divided by the pooled within-group SD of the raw outcome
 #   across that factor's levels, so covariates don't inflate d (the residual SD
 #   shrinks as covariates explain variance; Lakens, 2013).
@@ -374,16 +375,73 @@ random_variance <- function(model) {
   total
 }
 
-add_std_diff <- function(est, model, type) {
-  est$es <- est$es.low <- est$es.high <- NA_real_
-  if (!type %in% c("lm", "lmer")) return(est)
+# Logistic (logit) and ordinal (cumulative logit) models: d is the log odds
+#   ratio divided by the SD of the latent response, a standard logistic
+#   variable for one observation, SD = pi / sqrt(3) (Chinn, 2000). Mixed
+#   models add the variance the random effects contribute (as for lmer), so d
+#   is on the same latent total-variance scale as the linear mixed d and is
+#   smaller than the conditional OR alone would suggest (Snijders & Bosker,
+#   2012; Nakagawa & Schielzeth, 2013). Links other than logit have no d.
+latent_sd <- function(model, type, data = NULL) {
+  if (type %in% c("ordinal", "ordinal_mixed") && !identical(model$link, "logit")) return(NA_real_)
+  extra <- switch(type, glmer = random_variance(model),
+                  ordinal_mixed = random_variance_clmm(model, data), 0)
+  sqrt(pi^2 / 3 + extra)
+}
+
+# random_variance() for ordinal::clmm fits, which lme4's getME() cannot read:
+# the same average of z' Sigma z over rows, with each term's Z rebuilt from the
+# data and its bar's left-hand side. NA if the pieces cannot be matched.
+random_variance_clmm <- function(model, data) {
+  if (is.null(data)) return(NA_real_)
+  vc <- ordinal::VarCorr(model)
+  bars <- formula_bars(stats::formula(model))
+  if (length(bars) != length(vc)) return(NA_real_)
+  total <- 0
+  for (k in seq_along(vc)) {
+    Sigma <- as.matrix(vc[[k]])
+    Z <- tryCatch(stats::model.matrix(stats::as.formula(paste("~", paste(deparse(bars[[k]][[2]]), collapse = " "))), data),
+                  error = function(e) NULL)
+    if (is.null(Z) || !setequal(colnames(Z), colnames(Sigma))) return(NA_real_)
+    Z <- Z[, colnames(Sigma), drop = FALSE]
+    total <- total + mean(rowSums((Z %*% Sigma) * Z))
+  }
+  total
+}
+
+# The `lhs | group` terms of a model formula, in the order they appear.
+formula_bars <- function(f) {
+  walk <- function(e) {
+    if (!is.call(e)) return(list())
+    if (identical(e[[1]], as.name("|")) || identical(e[[1]], as.name("||"))) return(list(e))
+    do.call(c, lapply(as.list(e)[-1], walk))
+  }
+  walk(f[[length(f)]])
+}
+
+add_std_diff <- function(est, model, type, data = NULL) {
+  est$es <- est$es.low <- est$es.high <- est$es_sd <- NA_real_
   ok <- which(est$row_type == "level" & !est$is_ref)
+  if (type %in% c("logit", "glmer", "ordinal", "ordinal_mixed")) {
+    sdv <- latent_sd(model, type, data)
+    if (is.na(sdv) || sdv <= 0) return(est)
+    for (i in ok) {
+      tr <- if (isTRUE(est$log_scale[i])) log else identity   # rows are ORs unless exponentiate = FALSE
+      vals <- tr(c(est$estimate[i], est$conf.low[i], est$conf.high[i])) / sdv
+      if (!all(is.finite(vals))) next
+      est$es[i] <- vals[1]; est$es.low[i] <- vals[2]; est$es.high[i] <- vals[3]
+      est$es_sd[i] <- sdv
+    }
+    return(est)
+  }
+  if (!type %in% c("lm", "lmer")) return(est)
   for (i in ok) {
     sdv <- std_sd(model, type, est$variable[i])
     if (is.na(sdv) || sdv <= 0) next
     est$es[i] <- est$estimate[i] / sdv
     est$es.low[i] <- est$conf.low[i] / sdv
     est$es.high[i] <- est$conf.high[i] / sdv
+    est$es_sd[i] <- sdv
   }
   est
 }

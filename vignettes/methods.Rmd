@@ -62,7 +62,14 @@ these applied to that table.
   by the pooled within-group SD of the outcome for linear models, so
   covariates don't inflate it. For mixed models it divides by the total SD of
   one observation: the residual variance plus the variance the random effects
-  add, random slopes included.
+  add, random slopes included. For logistic and ordinal (cumulative logit)
+  models *d* is the log odds ratio divided by the SD of the latent logistic
+  response, $\pi/\sqrt{3} \approx 1.81$ (Chinn, 2000); mixed models add the
+  random-effect variance to that variance, so *d* is on the latent
+  total-variance scale and is smaller than the conditional OR alone implies
+  (Snijders & Bosker, 2012; Nakagawa & Schielzeth, 2013). It is a
+  conversion for comparing effects across outcomes: report the odds ratio as
+  the effect size and treat *d* as approximate.
 
 ## What the checks can and can't do
 
