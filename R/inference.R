@@ -1,7 +1,8 @@
 # Coefficient inference -------------------------------------------------------
 #
 # Defaults (se = "robust"):
-#   lm, logit, poisson, negbin, no cluster -> HC3 (sandwich); t (lm) or z
+#   lm, logit, poisson, negbin, no cluster -> HC3 (sandwich), or the `vcov_type`
+#                                             requested; t (lm) or z
 #   lm, logit, poisson, negbin, cluster    -> CR2 (clubSandwich), Satterthwaite df
 #   lmer                                   -> CR2 clustered on `cluster` (default:
 #                                             first grouping factor), Satterthwaite df
@@ -16,7 +17,7 @@
 robust_available <- function(type) type %in% c("lm", "logit", "poisson", "negbin", "lmer",
                                                 "ordinal")
 
-model_vcov <- function(model, type, se, cluster_vec) {
+model_vcov <- function(model, type, se, cluster_vec, vcov_type = "HC3") {
   if (is_bayes(type)) return(NULL)
   if (se == "robust" && robust_available(type)) {
     if (type == "ordinal") {
@@ -24,7 +25,7 @@ model_vcov <- function(model, type, se, cluster_vec) {
       return(sandwich::vcovCL(model, cluster = cluster_vec, type = "HC1"))
     }
     if (is.null(cluster_vec) && type != "lmer") {
-      return(sandwich::vcovHC(model, type = "HC3"))
+      return(sandwich::vcovHC(model, type = vcov_type))
     }
     return(clubSandwich::vcovCR(model, cluster = cluster_vec, type = "CR2"))
   }
@@ -105,7 +106,7 @@ exponentiate_rows <- function(df) {
   df
 }
 
-se_method_text <- function(type, se, cluster_name) {
+se_method_text <- function(type, se, cluster_name, vcov_type = "HC3") {
   if (is_bayes(type)) {
     return("posterior medians with equal-tailed credible intervals (brms)")
   }
@@ -117,6 +118,6 @@ se_method_text <- function(type, se, cluster_name) {
     return(if (is.null(cluster_name)) "robust (sandwich) SEs" else
       sprintf("cluster-robust SEs clustered by %s", cluster_name))
   }
-  if (type != "lmer" && is.null(cluster_name)) return("HC3 robust SEs")
+  if (type != "lmer" && is.null(cluster_name)) return(paste0(vcov_type, " robust SEs"))
   sprintf("CR2 cluster-robust SEs clustered by %s with Satterthwaite df", cluster_name)
 }

@@ -13,6 +13,7 @@ clean_regress(
   type = NULL,
   cluster = NULL,
   se = c("robust", "model"),
+  vcov_type = c("HC3", "HC1", "HC0", "HC2", "HC4"),
   contrasts = NULL,
   contrast_adjust = "holm",
   dv_adjust = "none",
@@ -60,6 +61,12 @@ vector of predictor terms shared by all outcomes.}
 grouping factor for mixed models and to none (HC3) for lm/logit.}
 
 \item{se}{\code{"robust"} (default; HC3, or CR2 when clustered or mixed) or \code{"model"}.}
+
+\item{vcov_type}{Heteroskedasticity-consistent estimator for robust SEs
+without clustering (lm, logistic, Poisson, negative binomial): one of
+\code{"HC3"} (default), \code{"HC1"}, \code{"HC0"}, \code{"HC2"}, \code{"HC4"}, passed to
+\code{\link[sandwich:vcovHC]{sandwich::vcovHC()}}. Ignored when \code{se = "model"}, and for clustered and
+mixed models, which use CR2. The table's methods note names the estimator.}
 
 \item{contrasts}{Pairwise contrasts: \code{NULL} (none), \code{TRUE} (every factor
 predictor with 3+ levels), or a character vector of factor names.}

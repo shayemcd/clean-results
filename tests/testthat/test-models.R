@@ -252,3 +252,11 @@ test_that("the d note describes only the kinds of d that are shown, and travels 
   mm <- clean_regress(model_data(), dvs = c(share = "logistic"), predictors = ~ condition, random = ~ (1 | id))
   expect_match(cr_d_note(mm), "random-effect variance for mixed models")
 })
+
+test_that("non-finite numeric outcomes are dropped like missing values", {
+  d <- make_data()
+  d$score[c(3, 10)] <- c(Inf, -Inf)
+  d$score[5] <- NA
+  res <- clean_regress(d, dvs = c(score = "linear"), predictors = ~ condition + age)
+  expect_equal(res$meta$score$n, nrow(d) - 3L)
+})
