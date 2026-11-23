@@ -61,16 +61,130 @@
 #' @param intercept Show the intercept row.
 #' @param baseline Pre-treatment measure of each outcome, added as a covariate
 #'   centered on the analysis sample (ANCOVA): a named vector
-#'   `c(trust = "trust_pre")`, or one column for every outcome.
+#'   `c(trust = "trust_pre")`, or one column for every outcome. See `d_method`
+#'   for the two *d*'s that use it.
 #' @param lin Treatment variable(s) to interact with the centered baseline (the
 #'   Lin, 2013 estimator); treatment rows then estimate the effect at the mean
 #'   baseline.
 #' @param contrast_by A moderator: pairwise contrasts are computed within each
 #'   of its levels (simple effects), adjusted within each level.
+#' @param d_method How the standardized difference *d* is calculated (the
+#'   `es` columns, the *d* column of [cr_table()], and [cr_d()]). Each option
+#'   and its source is described under "Standardized differences (d)" below.
+#'   \describe{
+#'     \item{`"adjusted"` (default)}{Covariate-adjusted difference over the
+#'       SD of the outcome ignoring covariates, with Hedges' correction
+#'       (What Works Clearinghouse, 2022; Olejnik & Algina, 2000; Hedges,
+#'       1981). Mixed models: total SD (Westfall, Kenny, & Judd, 2014).
+#'       Logistic and ordinal: latent total SD (Chinn, 2000; Nakagawa &
+#'       Schielzeth, 2013).}
+#'     \item{`"baseline"`}{Linear models with a `baseline`: adjusted
+#'       difference over the pooled pre-treatment SD, with Hedges' correction
+#'       (the denominator of d_ppc2; Morris, 2008).}
+#'     \item{`"dppc2"`}{Linear models with a `baseline`: Morris's (2008)
+#'       d_ppc2 itself, the difference in mean pre-post change over the pooled
+#'       pre-treatment SD, without covariate adjustment.}
+#'     \item{`"partial"`}{Adjusted difference over the residual SD (Lakens,
+#'       2013); logistic and ordinal: over \eqn{\pi/\sqrt{3}}{pi/sqrt(3)} alone
+#'       (Chinn, 2000).}
+#'     \item{`"none"`}{No *d*.}
+#'   }
+#'   `"baseline"` and `"dppc2"` fall back to `"adjusted"` for outcomes
+#'   without a baseline and for non-linear or mixed models.
+#' @param d_sd Optional SD to standardize by instead, for linear and linear
+#'   mixed models (e.g. a population or norm-sample SD): one number for all
+#'   outcomes or a named vector per outcome. Not corrected for small samples.
 #' @param fit_args List of extra arguments passed to every model fitter, e.g.
 #'   `list(control = lme4::glmerControl(optimizer = "bobyqa"))`.
 #'
 #' @return An object of class `clean_results`.
+#'
+#' @section Standardized differences (d):
+#' *d* is reported for factor levels and pairwise contrasts in linear, linear
+#' mixed, logistic, and ordinal (cumulative logit) models. Its CI is the
+#' estimate's CI on the same scale (so it uses the same robust SEs and
+#' adjustments), except for `"dppc2"`, which has its own SE.
+#' \describe{
+#'   \item{`"adjusted"`, linear models}{\eqn{g = c(N - k)\, b / SD_p}{g = c(N - k) b / SD_p}, where
+#'     *b* is the model's covariate-adjusted difference, \eqn{SD_p} the
+#'     pooled within-group SD of the raw outcome across the factor's *k*
+#'     levels, and *c* Hedges' (1981) small-sample correction. This is the
+#'     What Works Clearinghouse (2022, Appendix E) Hedges' *g* for adjusted
+#'     designs, and the "standardizer ignoring the covariates" of Olejnik and
+#'     Algina (2000): covariates sharpen the numerator but do not shrink the
+#'     SD, so *d* stays comparable to *d* from designs without them
+#'     (Lakens, 2013). The recommended default.}
+#'   \item{`"adjusted"`, linear mixed models}{*b* over the total SD of one
+#'     observation, \eqn{\sqrt{\sigma^2_e + \sigma^2_{random}}}{sqrt(residual variance + random-effect variance)}, the
+#'     random-effect variance averaged over rows so random slopes count
+#'     (Westfall, Kenny, & Judd, 2014; the \eqn{\delta_T}{delta_T} of Hedges, 2007).}
+#'   \item{`"adjusted"`, logistic and ordinal models}{ln(OR) over the
+#'     SD of the latent response: the logistic variance \eqn{\pi^2/3}{pi^2/3}
+#'     (Chinn, 2000) plus the variance of the other fixed effects' linear
+#'     predictor (pooled within the factor's levels) and, in mixed models, the
+#'     random-effect variance (Nakagawa & Schielzeth, 2013). The latent
+#'     analogue of the linear *d*'s SD ignoring covariates. An approximation:
+#'     the odds ratio is the primary effect size.}
+#'   \item{`"baseline"`}{Linear models with a `baseline`: *b* over the pooled
+#'     within-group SD of the pre-treatment measure, times Hedges' correction:
+#'     the denominator of \eqn{d_{ppc2}}{d_ppc2} (Morris, 2008), and the What Works
+#'     Clearinghouse's fallback when no posttest SD is available. Useful when
+#'     the treatment changes the outcome's spread.}
+#'   \item{`"dppc2"`}{Linear models with a `baseline`: Morris's (2008)
+#'     \eqn{d_{ppc2} = c(n_A + n_B - 2)[(\bar{y}_A - \bar{x}_A) - (\bar{y}_B -
+#'     \bar{x}_B)] / SD_{pre}}{d_ppc2 = c(nA + nB - 2) [(post_A - pre_A) - (post_B - pre_B)] / SD_pre},
+#'     with group means of the post (y) and pre (x) scores, from the model's analysis sample (complete
+#'     pre/post pairs) of the two groups compared, with CIs from his Eq. 25
+#'     sampling variance. It ignores the model's other covariates and uses the
+#'     change score, not the ANCOVA estimate, so it can differ from *b* when
+#'     groups differ at baseline. Use it to match meta-analyses that report it.}
+#'   \item{`"partial"`}{*b* over the model's residual SD: grows as covariates
+#'     explain variance, so it is not comparable across designs (Lakens, 2013;
+#'     Olejnik & Algina, 2000). For logistic and ordinal models,
+#'     \eqn{\ln(OR) / (\pi/\sqrt{3})}{ln(OR) / (pi/sqrt(3))}, conditional on covariates and random
+#'     effects (Chinn, 2000).}
+#' }
+#' The table note ([cr_d_note()]) states which was used, and [cr_d()]
+#' recomputes *d* under another method without refitting.
+#'
+#' @references
+#' Chinn, S. (2000). A simple method for converting an odds ratio to effect
+#' size for use in meta-analysis. *Statistics in Medicine, 19*(22), 3127-3131.
+#'
+#' Hedges, L. V. (1981). Distribution theory for Glass's estimator of effect
+#' size and related estimators. *Journal of Educational Statistics, 6*(2),
+#' 107-128.
+#'
+#' Hedges, L. V. (2007). Effect sizes in cluster-randomized designs. *Journal
+#' of Educational and Behavioral Statistics, 32*(4), 341-370.
+#'
+#' Lakens, D. (2013). Calculating and reporting effect sizes to facilitate
+#' cumulative science: A practical primer for t-tests and ANOVAs. *Frontiers
+#' in Psychology, 4*, 863.
+#'
+#' Lin, W. (2013). Agnostic notes on regression adjustments to experimental
+#' data: Reexamining Freedman's critique. *Annals of Applied Statistics, 7*(1),
+#' 295-318.
+#'
+#' Morris, S. B. (2008). Estimating effect sizes from pretest-posttest-control
+#' group designs. *Organizational Research Methods, 11*(2), 364-386.
+#'
+#' Nakagawa, S., & Schielzeth, H. (2013). A general and simple method for
+#' obtaining R2 from generalized linear mixed-effects models. *Methods in
+#' Ecology and Evolution, 4*(2), 133-142.
+#'
+#' Olejnik, S., & Algina, J. (2000). Measures of effect size for comparative
+#' studies: Applications, interpretations, and limitations. *Contemporary
+#' Educational Psychology, 25*(3), 241-286.
+#'
+#' Westfall, J., Kenny, D. A., & Judd, C. M. (2014). Statistical power and
+#' optimal design in experiments in which samples of participants respond to
+#' samples of stimuli. *Journal of Experimental Psychology: General, 143*(5),
+#' 2020-2045.
+#'
+#' What Works Clearinghouse. (2022). *What Works Clearinghouse procedures and
+#' standards handbook, version 5.0*. U.S. Department of Education, Institute of
+#' Education Sciences. Appendix E.
 #' @export
 #' @examples
 #' \dontrun{
@@ -94,8 +208,11 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
                           labels = NULL, level_labels = NULL, dv_labels = NULL,
                           clean_labels = TRUE, label_case = "sentence", intercept = TRUE,
                           baseline = NULL, lin = NULL, contrast_by = NULL,
-                          fit_args = list()) {
+                          d_method = c("adjusted", "baseline", "dppc2", "partial", "none"),
+                          d_sd = NULL, fit_args = list()) {
   se <- match.arg(se)
+  d_method <- match.arg(d_method)
+  d_sd <- check_d_sd(d_sd, names(normalize_dvs(dvs, type)))
   vcov_type <- match.arg(vcov_type)
   if (!is.data.frame(data)) stop("`data` must be a data frame.", call. = FALSE)
   dv_adjust <- match.arg(dv_adjust, stats::p.adjust.methods)
@@ -181,7 +298,8 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     est <- rbind(fixed[, names(ctr %||% fixed)], ctr)
     est$log_scale <- exp_i
     est$ci_level <- ci_levels(est, conf_level)
-    est <- add_std_diff(est, m, mtype, d_i)
+    d_kind <- resolve_d_method(d_method, mtype, has_base, d_sd[[dv]])
+    est <- add_std_diff(est, m, mtype, d_i, d_kind, if (has_base) base_col, contrast_by, d_sd[[dv]])
     est$dv <- dv
     est$p.within <- est$p.value
     est_list[[dv]] <- est
@@ -192,7 +310,7 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     stats_list[[dv]] <- fit_stats(m, mtype, lab_fun, parts)
     meta[[dv]] <- list(
       type = mtype, exponentiate = exp_i, est_name = if (exp_i) ratio_name(mtype) else "b",
-      bayes = is_bayes(mtype), baseline = if (has_base) base_col else NULL,
+      bayes = is_bayes(mtype), baseline = if (has_base) base_col else NULL, d_method = d_kind,
       cluster = if (robust_available(mtype) && se == "robust") cluster_name else NULL,
       se_text = se_method_text(mtype, se,
                                if (!is.null(cluster_name)) lab_fun$var(cluster_name),
@@ -220,10 +338,27 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     settings = list(
       dvs = names(dvs), dv_labels = dv_lab, se = se, conf_level = conf_level,
       contrast_adjust = contrast_adjust, dv_adjust = dv_adjust,
-      dv_adjust_terms = dv_adjust_terms, lin = lin,
+      dv_adjust_terms = dv_adjust_terms, lin = lin, d_method = d_method,
       var_labels = vapply(unique(c(dv_adjust_terms, character())), lab_fun$var, "")
     )
   ), class = "clean_results")
+}
+
+# d_sd as a named list per outcome (NULL entries for outcomes without one).
+check_d_sd <- function(d_sd, dv_names) {
+  out <- stats::setNames(vector("list", length(dv_names)), dv_names)
+  if (is.null(d_sd)) return(out)
+  if (!is.numeric(d_sd) || any(d_sd[!is.na(d_sd)] <= 0)) {
+    stop("`d_sd` must be a positive number, or a named vector with one per outcome.", call. = FALSE)
+  }
+  if (is.null(names(d_sd))) {
+    if (length(d_sd) != 1) stop("An unnamed `d_sd` must be a single number.", call. = FALSE)
+    d_sd <- stats::setNames(rep(d_sd, length(dv_names)), dv_names)
+  }
+  bad <- setdiff(names(d_sd), dv_names)
+  if (length(bad)) stop(sprintf("`d_sd` names not among the outcomes: %s", paste(bad, collapse = ", ")), call. = FALSE)
+  for (n in names(d_sd)) out[n] <- list(unname(d_sd[[n]]))
+  out
 }
 
 normalize_dvs <- function(dvs, type) {
@@ -326,6 +461,13 @@ rescale_ci <- function(r, new_level) {
     r$es.low[has_es] <- (ifelse(log_scale, lg(lo), lo) / r$es_sd)[has_es]
     r$es.high[has_es] <- (ifelse(log_scale, lg(hi), hi) / r$es_sd)[has_es]
   }
+  if ("es_se" %in% names(r)) {
+    # d_ppc2 rows: d has its own (normal) SE, not the estimate's
+    has_se <- ok & !is.na(r$es) & !is.na(r$es_se)
+    z <- stats::qnorm(1 - (1 - new_level) / 2)
+    r$es.low[has_se] <- (r$es - z * r$es_se)[has_se]
+    r$es.high[has_se] <- (r$es + z * r$es_se)[has_se]
+  }
   r$conf.low[ok] <- lo[ok]
   r$conf.high[ok] <- hi[ok]
   r$ci_level[ok] <- new_level[ok]
@@ -333,28 +475,83 @@ rescale_ci <- function(r, new_level) {
 }
 
 # Standardized differences (Cohen's d) for linear, logistic, and ordinal models.
-# lm: the difference divided by the pooled within-group SD of the raw outcome
-#   across that factor's levels, so covariates don't inflate d (the residual SD
-#   shrinks as covariates explain variance; Lakens, 2013).
-# lmer: divided by the total SD of one observation: sqrt(residual variance +
-#   the variance the random effects add, slopes included) (Westfall, Kenny, &
-#   Judd, 2014; Brysbaert & Stevens, 2018).
-std_sd <- function(model, type, variable = NULL) {
+# `method` is the resolved d_method for one outcome (resolve_d_method()); the
+# references for each are in ?clean_regress, section "Standardized differences".
+# lm, "adjusted": the covariate-adjusted difference over the pooled
+#   within-group SD of the raw outcome across that factor's levels, times the
+#   Hedges small-sample correction c(N - k): Hedges' g as the What Works
+#   Clearinghouse (2022, App. E) computes it, the "SD ignoring covariates" of
+#   Olejnik & Algina (2000). Covariates don't inflate it (Lakens, 2013).
+# lm, "baseline": the same numerator over the pooled within-group SD of the
+#   pre-treatment measure, times c(N - k): the denominator of d_ppc2 (Morris, 2008).
+# lm/lmer, "partial": over the residual SD (sigma), which shrinks as
+#   covariates explain variance.
+# lmer, "adjusted": over the total SD of one observation, sqrt(residual
+#   variance + the variance the random effects add, slopes included)
+#   (Westfall, Kenny, & Judd, 2014; Hedges's 2007 delta_T).
+# "user": over the SD passed in `d_sd`.
+std_sd <- function(model, type, variable = NULL, method = "adjusted", d_sd = NULL) {
+  if (method == "user") return(d_sd)
+  if (method == "partial" && type %in% c("lm", "lmer")) return(stats::sigma(model))
   if (type == "lm") {
     if (is.null(variable)) return(NA_real_)
     mf <- stats::model.frame(model)
     if (!variable %in% names(mf)) return(NA_real_)
-    y <- stats::model.response(mf)
+    # "baseline": the pre-treatment measure (centered; the pooled SD is
+    # unaffected by centering) replaces the outcome as the scale
+    use_base <- method == "baseline" && ".baseline" %in% names(mf)
+    y <- if (use_base) mf[[".baseline"]] else stats::model.response(mf)
     g <- as.character(mf[[variable]])
     ok <- !is.na(y) & !is.na(g)
     y <- y[ok]; g <- g[ok]
     n_g <- tapply(y, g, length)
     v_g <- tapply(y, g, stats::var)
     keep <- n_g > 1
-    return(sqrt(sum((n_g[keep] - 1) * v_g[keep]) / (sum(n_g[keep]) - sum(keep))))
+    df <- sum(n_g[keep]) - sum(keep)
+    sqrt(sum((n_g[keep] - 1) * v_g[keep]) / df) / hedges_c(df)
+  } else if (type == "lmer") {
+    sqrt(stats::sigma(model)^2 + random_variance(model))
+  } else NA_real_
+}
+
+# d_ppc2 (Morris, 2008, Eq. 8) for one row: the difference between the two
+# groups in mean pre-post change over the pooled pre-treatment SD of those two
+# groups, times c(nA + nB - 2), on the model's analysis sample (complete
+# pre/post pairs), without covariate adjustment. Its sampling variance is
+# Morris's Eq. 25 with the pooled within-group pre-post correlation. Returns
+# c(d, se), or NAs when the row is not a comparison of two levels.
+dppc2_row <- function(row, model, data, base_col, by_var = NULL) {
+  out <- c(NA_real_, NA_real_)
+  v <- row$variable
+  mf <- stats::model.frame(model)
+  if (is.null(base_col) || !v %in% names(mf) || nrow(mf) != nrow(data)) return(out)
+  y <- stats::model.response(mf); pre <- data[[base_col]]; g <- as.character(mf[[v]])
+  if (row$section == "contrast") {
+    ab <- strsplit(row$level, " vs. ", fixed = TRUE)[[1]]
+    if (length(ab) != 2) return(out)
+    by_g <- regmatches(row$key, regexec("\\|[^=]+=(.*)::", row$key))[[1]]
+    if (length(by_g) == 2 && !is.null(by_var) && by_var %in% names(data)) {
+      keep <- as.character(data[[by_var]]) == by_g[2]
+      y <- y[keep]; pre <- pre[keep]; g <- g[keep]
+    }
+  } else {
+    lv <- factor_levels(mf[[v]])
+    if (is.null(lv)) return(out)
+    ab <- c(row$level, lv[1])
   }
-  if (type == "lmer") return(sqrt(stats::sigma(model)^2 + random_variance(model)))
-  NA_real_
+  A <- g == ab[1]; B <- g == ab[2]
+  nA <- sum(A); nB <- sum(B); N <- nA + nB
+  if (nA < 2 || nB < 2 || N < 5) return(out)
+  sd_pre <- sqrt(((nA - 1) * stats::var(pre[A]) + (nB - 1) * stats::var(pre[B])) / (N - 2))
+  cp <- hedges_c(N - 2)
+  d <- cp * ((mean(y[A]) - mean(pre[A])) - (mean(y[B]) - mean(pre[B]))) / sd_pre
+  # pooled within-group pre-post correlation
+  cv <- ((nA - 1) * stats::cov(pre[A], y[A]) + (nB - 1) * stats::cov(pre[B], y[B])) / (N - 2)
+  sd_post <- sqrt(((nA - 1) * stats::var(y[A]) + (nB - 1) * stats::var(y[B])) / (N - 2))
+  rho <- cv / (sd_pre * sd_post)
+  k <- N / (nA * nB)
+  v_d <- 2 * cp^2 * (1 - rho) * k * ((N - 2) / (N - 4)) * (1 + d^2 / (2 * (1 - rho) * k)) - d^2
+  c(d, if (is.finite(v_d) && v_d > 0) sqrt(v_d) else NA_real_)
 }
 
 # Average variance the random effects add to one observation: mean over rows
@@ -376,17 +573,48 @@ random_variance <- function(model) {
 }
 
 # Logistic (logit) and ordinal (cumulative logit) models: d is the log odds
-#   ratio divided by the SD of the latent response, a standard logistic
-#   variable for one observation, SD = pi / sqrt(3) (Chinn, 2000). Mixed
-#   models add the variance the random effects contribute (as for lmer), so d
-#   is on the same latent total-variance scale as the linear mixed d and is
-#   smaller than the conditional OR alone would suggest (Snijders & Bosker,
-#   2012; Nakagawa & Schielzeth, 2013). Links other than logit have no d.
-latent_sd <- function(model, type, data = NULL) {
+#   ratio divided by the SD of the latent response. "partial": the residual
+#   latent SD alone, a standard logistic variable, pi / sqrt(3) (Chinn, 2000),
+#   conditional on the covariates and random effects. "adjusted": the latent
+#   analogue of the linear d's SD ignoring covariates: pi^2 / 3, plus the
+#   variance of the linear predictor from the other fixed effects (pooled
+#   within the levels of the focal factor, so the treatment itself does not
+#   count), plus, for mixed models, the variance the random effects add
+#   (Nakagawa & Schielzeth, 2013; Snijders & Bosker, 2012). Links other than
+#   logit have no d.
+latent_sd <- function(model, type, data = NULL, variable = NULL, method = "adjusted") {
   if (type %in% c("ordinal", "ordinal_mixed") && !identical(model$link, "logit")) return(NA_real_)
+  if (method == "partial") return(pi / sqrt(3))
   extra <- switch(type, glmer = random_variance(model),
                   ordinal_mixed = random_variance_clmm(model, data), 0)
-  sqrt(pi^2 / 3 + extra)
+  sqrt(pi^2 / 3 + extra + covariate_variance(model, type, data, variable))
+}
+
+# Variance of the fixed-effect linear predictor from every term except those
+# involving `variable` (its main effect and interactions), pooled within the
+# levels of `variable`. 0 when there are no other terms; NA if it can't be built.
+covariate_variance <- function(model, type, data, variable) {
+  if (is.null(data) || is.null(variable)) return(0)
+  fo <- if (type %in% c("ordinal", "ordinal_mixed")) model$formula else stats::formula(model)
+  if (type %in% c("glmer", "ordinal_mixed")) fo <- no_bars(fo)
+  beta <- switch(type, glmer = lme4::fixef(model),
+                 ordinal = , ordinal_mixed = model$beta, stats::coef(model))
+  tt <- stats::delete.response(stats::terms(fo))
+  mf <- tryCatch(stats::model.frame(tt, data), error = function(e) NULL)
+  if (is.null(mf)) return(NA_real_)
+  X <- stats::model.matrix(tt, mf)
+  fac <- attr(tt, "factors")
+  focal <- if (variable %in% rownames(fac)) which(fac[variable, ] > 0) else integer()
+  keep <- !attr(X, "assign") %in% c(0L, focal) & colnames(X) %in% names(beta)
+  keep <- keep & colnames(X) %in% names(beta)[!is.na(beta)]
+  if (!any(keep)) return(0)
+  lp <- drop(X[, keep, drop = FALSE] %*% beta[colnames(X)[keep]])
+  g <- if (variable %in% names(mf)) mf[[variable]] else NULL
+  if (is.null(g) || is.null(factor_levels(g))) return(stats::var(lp))
+  g <- as.character(g)
+  n_g <- tapply(lp, g, length); v_g <- tapply(lp, g, stats::var)
+  ok <- n_g > 1
+  sum((n_g[ok] - 1) * v_g[ok]) / (sum(n_g[ok]) - sum(ok))
 }
 
 # random_variance() for ordinal::clmm fits, which lme4's getME() cannot read:
@@ -419,13 +647,35 @@ formula_bars <- function(f) {
   walk(f[[length(f)]])
 }
 
-add_std_diff <- function(est, model, type, data = NULL) {
-  est$es <- est$es.low <- est$es.high <- est$es_sd <- NA_real_
+# Hedges' small-sample bias correction c(m) = Gamma(m/2) / (sqrt(m/2) * Gamma((m-1)/2))
+# (Hedges, 1981); the exact form metafor uses for d_ppc2 (Morris, 2008).
+hedges_c <- function(df) {
+  if (!is.finite(df) || df < 2) return(NA_real_)
+  exp(lgamma(df / 2) - log(sqrt(df / 2)) - lgamma((df - 1) / 2))
+}
+
+# Which d each outcome gets: d_method as asked, where it applies. "baseline"
+# and "dppc2" need a linear model with a baseline (otherwise "adjusted");
+# d_sd overrides the SD for linear models.
+resolve_d_method <- function(d_method, type, has_base, d_sd = NULL) {
+  if (d_method == "none") return("none")
+  if (type %in% c("lm", "lmer") && !is.null(d_sd) && !is.na(d_sd)) return("user")
+  if (d_method %in% c("baseline", "dppc2") && !(type == "lm" && has_base)) return("adjusted")
+  d_method
+}
+
+add_std_diff <- function(est, model, type, data = NULL, method = "adjusted",
+                         base_col = NULL, by_var = NULL, d_sd = NULL) {
+  est$es <- est$es.low <- est$es.high <- est$es_sd <- est$es_se <- NA_real_
+  if (method == "none") return(est)
   ok <- which(est$row_type == "level" & !est$is_ref)
   if (type %in% c("logit", "glmer", "ordinal", "ordinal_mixed")) {
-    sdv <- latent_sd(model, type, data)
-    if (is.na(sdv) || sdv <= 0) return(est)
+    cache <- list()
     for (i in ok) {
+      v <- est$variable[i]
+      if (is.null(cache[[v]])) cache[[v]] <- latent_sd(model, type, data, v, method)
+      sdv <- cache[[v]]
+      if (is.na(sdv) || sdv <= 0) next
       tr <- if (isTRUE(est$log_scale[i])) log else identity   # rows are ORs unless exponentiate = FALSE
       vals <- tr(c(est$estimate[i], est$conf.low[i], est$conf.high[i])) / sdv
       if (!all(is.finite(vals))) next
@@ -436,7 +686,15 @@ add_std_diff <- function(est, model, type, data = NULL) {
   }
   if (!type %in% c("lm", "lmer")) return(est)
   for (i in ok) {
-    sdv <- std_sd(model, type, est$variable[i])
+    if (method == "dppc2") {
+      ds <- dppc2_row(est[i, , drop = FALSE], model, data, base_col, by_var)
+      if (anyNA(ds)) next
+      q <- stats::qnorm(1 - (1 - est$ci_level[i]) / 2)
+      est$es[i] <- ds[1]; est$es_se[i] <- ds[2]
+      est$es.low[i] <- ds[1] - q * ds[2]; est$es.high[i] <- ds[1] + q * ds[2]
+      next
+    }
+    sdv <- std_sd(model, type, est$variable[i], method, d_sd)
     if (is.na(sdv) || sdv <= 0) next
     est$es[i] <- est$estimate[i] / sdv
     est$es.low[i] <- est$conf.low[i] / sdv

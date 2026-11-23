@@ -17,16 +17,22 @@ test_that("cr_rows gives one schema with groups and d", {
   expect_equal(g$group2, "Control")
   vc <- as.data.frame(lme4::VarCorr(res$models$trust))
   expect_equal(g$es, g$estimate / sqrt(sum(vc$vcov)))
-  # lm: pooled within-group SD of the raw outcome, unaffected by covariates
+  # lm: pooled within-group SD of the raw outcome, unaffected by covariates, with Hedges' correction
   d <- make_data()
   r1 <- clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition + age)
   lv <- cr_find(r1, "trust", "condition", "Gain")
   ns <- table(d$condition); vs <- tapply(d$trust, d$condition, var)
-  sp <- sqrt(sum((ns - 1) * vs) / (sum(ns) - length(ns)))
-  expect_equal(lv$es, lv$estimate / sp)
-  # logistic mixed: ln(OR) over the latent logistic SD plus the random-intercept variance
+  df <- sum(ns) - length(ns)
+  sp <- sqrt(sum((ns - 1) * vs) / df)
+  cdf <- exp(lgamma(df / 2) - log(sqrt(df / 2)) - lgamma((df - 1) / 2))
+  expect_equal(lv$es, cdf * lv$estimate / sp)
+  # logistic mixed: ln(OR) over the latent logistic SD plus the random-intercept
+  # variance and the variance of the covariate's linear predictor, pooled within condition
   sh <- r[r$dv == "share" & r$section == "fixed" & r$level %in% "Gain", ]
-  sdv <- sqrt(pi^2 / 3 + as.numeric(lme4::VarCorr(res$models$share)$id))
+  fs <- res$models$share; ds <- res$data$share
+  lp <- lme4::fixef(fs)[["age"]] * ds$age
+  cov_v <- sum(tapply(lp, ds$condition, function(z) (length(z) - 1) * var(z))) / (length(lp) - nlevels(factor(ds$condition)))
+  sdv <- sqrt(pi^2 / 3 + as.numeric(lme4::VarCorr(fs)$id) + cov_v)
   expect_equal(sh$es, log(sh$estimate) / sdv)
   expect_true(all(is.na(r$es[r$dv == "share" & is.na(r$level)])))   # no d for intercept or continuous terms
 })
@@ -237,7 +243,7 @@ test_that("tables can show d", {
   res <- res_text()
   tb <- cr_table(res, effect_size = TRUE)
   expect_true("d" %in% tb$grid$sub_head)
-  expect_match(paste(tb$grid$notes, collapse = " "), "standardized mean difference")
+  expect_match(paste(tb$grid$notes, collapse = " "), "total SD of one observation")
   expect_match(paste(cr_latex(tb), collapse = "\n"), "\\$d\\$")
 })
 

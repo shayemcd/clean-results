@@ -73,6 +73,89 @@ test_that("baseline adds a centered covariate; lin interacts it", {
                              baseline = "trust_pre", lin = "nope"), "lin")
 })
 
+test_that("d_method = 'baseline' uses the d_ppc2 scale: adjusted coefficient over the Hedges-corrected pre-SD", {
+  p <- one_per_person(model_data())
+  p <- p[p$condition %in% c("Control", "Gain"), ]
+  p$condition <- droplevels(p$condition)
+  res <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition,
+                       baseline = c(trust = "trust_pre"), d_method = "baseline")
+  lvl_row <- function(r) {
+    e <- r$estimates
+    e[e$variable == "condition" & e$level == "Gain" & e$row_type == "level", ]
+  }
+  row <- lvl_row(res)
+  ct <- p[p$condition == "Control", ]; tr <- p[p$condition == "Gain", ]
+  df <- nrow(ct) + nrow(tr) - 2
+  sd_pre <- sqrt(((nrow(ct) - 1) * var(ct$trust_pre) + (nrow(tr) - 1) * var(tr$trust_pre)) / df)
+  cdf <- exp(lgamma(df / 2) - log(sqrt(df / 2)) - lgamma((df - 1) / 2))
+  expect_equal(row$es_sd, sd_pre / cdf)
+  expect_equal(row$es, cdf * row$estimate / sd_pre)
+  expect_equal(row$es.low, cdf * row$conf.low / sd_pre)
+  # without a baseline it falls back to the default: the Hedges-corrected pooled outcome SD
+  nb <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition, d_method = "baseline")
+  sd_y <- sqrt(((nrow(ct) - 1) * var(ct$trust) + (nrow(tr) - 1) * var(tr$trust)) / df)
+  expect_equal(lvl_row(nb)$es_sd, sd_y / cdf)
+  expect_equal(nb$meta$trust$d_method, "adjusted")
+  expect_match(paste(d_note(res), collapse = " "), "d_ppc2")
+  expect_false(grepl("d_ppc2", paste(d_note(nb), collapse = " ")))
+})
+
+test_that("d_method = 'dppc2' is Morris's (2008) d_ppc2 on complete pre/post pairs, with his Eq. 25 SE", {
+  skip_if_not_installed("metafor")
+  p <- one_per_person(model_data())
+  p$trust[1:5] <- NA   # attriters: dropped from both pre and post
+  res <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition + age,
+                       baseline = "trust_pre", d_method = "dppc2", contrasts = "condition",
+                       contrast_adjust = "none")
+  cc <- p[!is.na(p$trust) & !is.na(p$age), ]
+  A <- cc[cc$condition == "Gain", ]; B <- cc[cc$condition == "Control", ]
+  nA <- nrow(A); nB <- nrow(B); N <- nA + nB
+  sd_pre <- sqrt(((nA - 1) * var(A$trust_pre) + (nB - 1) * var(B$trust_pre)) / (N - 2))
+  cp <- metafor:::.cmicalc(N - 2)
+  d_ref <- cp * ((mean(A$trust) - mean(A$trust_pre)) - (mean(B$trust) - mean(B$trust_pre))) / sd_pre
+  r <- cr_find(res, "trust", "condition", "Gain")
+  expect_equal(r$es, d_ref)
+  expect_true(r$es.low < r$es && r$es.high > r$es)
+  # contrasts use the same two groups in the other order
+  ctr <- res$estimates[res$estimates$section == "contrast" & res$estimates$level %in% "Gain vs. Control", ]
+  expect_equal(ctr$es, d_ref)
+  expect_match(cr_d_note(res), "Morris, 2008")
+  # cr_d() recomputes under another method without refitting
+  adj <- cr_d(res, pairs = "ref", d_method = "adjusted")
+  expect_equal(adj$d[adj$comparison == "Gain"], cr_find(clean_regress(p, dvs = c(trust = "linear"),
+    predictors = ~ condition + age, baseline = "trust_pre"), "trust", "condition", "Gain")$es)
+})
+
+test_that("d_method = 'partial', 'none', and d_sd", {
+  p <- one_per_person(model_data())
+  pa <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition + age, d_method = "partial")
+  r <- cr_find(pa, "trust", "condition", "Gain")
+  expect_equal(r$es, r$estimate / sigma(pa$models$trust))
+  expect_match(cr_d_note(pa), "residual SD")
+  no <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition, d_method = "none")
+  expect_true(all(is.na(no$estimates$es)))
+  us <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition, d_sd = 10)
+  r <- cr_find(us, "trust", "condition", "Gain")
+  expect_equal(r$es, r$estimate / 10)
+  expect_match(cr_d_note(us), "externally supplied")
+  expect_error(clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition, d_sd = c(x = 1)), "d_sd")
+  expect_error(clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition, d_method = "glass"))
+})
+
+test_that("the baseline-SD scale pools across all levels of a multi-level factor", {
+  p <- one_per_person(model_data())
+  res <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition,
+                       baseline = "trust_pre", d_method = "baseline")
+  n_g <- tapply(p$trust_pre, p$condition, length)
+  v_g <- tapply(p$trust_pre, p$condition, var)
+  df <- sum(n_g) - length(n_g)
+  cdf <- exp(lgamma(df / 2) - log(sqrt(df / 2)) - lgamma((df - 1) / 2))
+  sdv <- sqrt(sum((n_g - 1) * v_g) / df)
+  e <- res$estimates
+  e <- e[e$row_type == "level" & !e$is_ref & e$variable == "condition", ]
+  expect_true(all(abs(e$es_sd - sdv / cdf) < 1e-10))
+})
+
 test_that("contrast_by gives simple effects within moderator levels", {
   d <- model_data()
   res <- clean_regress(d, dvs = c(trust = "linear"), predictors = ~ condition * female,
@@ -164,7 +247,7 @@ test_that("d for logistic and ordinal models is ln(OR) over the latent logistic 
   p <- one_per_person(model_data())
   # logit: log OR / (pi / sqrt(3)), with the CI moved the same way
   lg <- clean_regress(p, dvs = c(share = "logistic"), predictors = ~ condition + age,
-                      contrasts = "condition", contrast_adjust = "none")
+                      contrasts = "condition", contrast_adjust = "none", d_method = "partial")
   r <- cr_find(lg, "share", "condition", "Loss")
   expect_equal(r$es, log(r$estimate) / sd0)
   expect_equal(c(r$es.low, r$es.high), log(c(r$conf.low, r$conf.high)) / sd0)
@@ -204,7 +287,7 @@ test_that("d for ordinal models, fixed and mixed (with a random slope)", {
   skip_if_not_installed("ordinal")
   sd0 <- sqrt(pi^2 / 3)
   p <- one_per_person(model_data())
-  o <- clean_regress(p, dvs = c(lik = "ordinal"), predictors = ~ condition + age)
+  o <- clean_regress(p, dvs = c(lik = "ordinal"), predictors = ~ condition + age, d_method = "partial")
   r <- cr_find(o, "lik", "condition", "Gain")
   expect_equal(r$es, log(r$estimate) / sd0)
   dd <- model_data()
@@ -216,7 +299,10 @@ test_that("d for ordinal models, fixed and mixed (with a random slope)", {
   Z <- cbind(`(Intercept)` = 1, x = dd$x[stats::complete.cases(dd[c("lik", "condition", "x", "id")])])
   extra <- mean(rowSums((Z %*% Sigma[colnames(Z), colnames(Z)]) * Z))
   rm_ <- cr_find(om, "lik", "condition", "Gain")
-  expect_equal(rm_$es, log(rm_$estimate) / sqrt(pi^2 / 3 + extra), tolerance = 1e-6)
+  cc <- dd[stats::complete.cases(dd[c("lik", "condition", "x", "id")]), ]
+  lp <- fit$beta[["x"]] * cc$x
+  cov_v <- sum(tapply(lp, cc$condition, function(z) (length(z) - 1) * var(z))) / (length(lp) - nlevels(cc$condition))
+  expect_equal(rm_$es, log(rm_$estimate) / sqrt(pi^2 / 3 + extra + cov_v), tolerance = 1e-6)
 })
 
 test_that("d is left empty for models without a defined standardized difference", {
@@ -250,7 +336,7 @@ test_that("the d note describes only the kinds of d that are shown, and travels 
   expect_error(cr_d_note(mtcars), "clean_results")
   skip_if_not_installed("lme4")
   mm <- clean_regress(model_data(), dvs = c(share = "logistic"), predictors = ~ condition, random = ~ (1 | id))
-  expect_match(cr_d_note(mm), "random-effect variance for mixed models")
+  expect_match(cr_d_note(mm), "and the random effects")
 })
 
 test_that("non-finite numeric outcomes are dropped like missing values", {

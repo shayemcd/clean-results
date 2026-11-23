@@ -211,18 +211,23 @@ cr_ttest <- function(data, dv, group, pairs = "all", ref = NULL, id = NULL, by =
 #'
 #' For a data frame, the same as [cr_ttest()]. For [clean_regress()] results,
 #' returns the model-based standardized differences: each factor level versus
-#' the reference and every pairwise contrast, divided by the pooled
-#' within-group SD of the outcome (`lm`) or the total SD (`lmer`), with CIs
-#' from the same robust SEs. For logistic and ordinal (cumulative logit)
-#' models, *d* is the log odds ratio divided by the SD of the latent logistic
-#' response, \eqn{\pi/\sqrt{3}} (Chinn, 2000); in mixed models the
-#' random-effect variance is added to that variance, giving the latent
-#' total-variance scale (Snijders & Bosker, 2012; Nakagawa & Schielzeth, 2013).
+#' the reference and every pairwise contrast, with CIs from the same robust
+#' SEs. How *d* is standardized is set by `d_method` in [clean_regress()]
+#' (see its section "Standardized differences (d)" for each method and its
+#' source); pass `d_method` here to recompute under another one without
+#' refitting. By default, linear-model *d* is Hedges' *g*: the
+#' covariate-adjusted difference over the pooled within-group SD of the
+#' outcome, with Hedges' small-sample correction (What Works Clearinghouse,
+#' 2022; Olejnik & Algina, 2000); linear mixed models use the total SD
+#' (Westfall, Kenny, & Judd, 2014); logistic and ordinal models divide the log
+#' odds ratio by the SD of the latent response (Chinn, 2000; Nakagawa &
+#' Schielzeth, 2013).
 #'
 #' @param x A data frame or a `clean_results` object.
 #' @param ... For data frames, arguments to [cr_ttest()]. For results, `dv`
 #'   and `variable` to filter, and `pairs` (`"all"` contrasts, `"ref"`
-#'   levels versus the reference, or `"A vs. B"` strings).
+#'   levels versus the reference, or `"A vs. B"` strings), plus `d_method`
+#'   and `d_sd` as in [clean_regress()] to recompute *d* with another method.
 #' @return A `cr_tests` object (data) or a data frame (results), which carries
 #'   how *d* was calculated as `attr(, "note")` (see [cr_d_note()]).
 #' @export
@@ -232,7 +237,9 @@ cr_d <- function(x, ...) UseMethod("cr_d")
 cr_d.data.frame <- function(x, ...) cr_ttest(x, ...)
 
 #' @export
-cr_d.clean_results <- function(x, dv = NULL, variable = NULL, pairs = "all", ...) {
+cr_d.clean_results <- function(x, dv = NULL, variable = NULL, pairs = "all",
+                               d_method = NULL, d_sd = NULL, ...) {
+  if (!is.null(d_method) || !is.null(d_sd)) x <- recompute_d(x, d_method, d_sd)
   r <- cr_rows(x)
   r <- r[!is.na(r$es), , drop = FALSE]
   if (!nrow(r)) {
@@ -260,6 +267,28 @@ cr_d.clean_results <- function(x, dv = NULL, variable = NULL, pairs = "all", ...
   rownames(r) <- NULL
   attr(r, "note") <- note
   r
+}
+
+# Recompute every outcome's d under another d_method (and/or d_sd) from the
+# stored models and analysis samples, keeping each row's current CI.
+recompute_d <- function(x, d_method = NULL, d_sd = NULL) {
+  d_method <- match.arg(d_method %||% x$settings$d_method %||% "adjusted",
+                        c("adjusted", "baseline", "dppc2", "partial", "none"))
+  d_sd <- check_d_sd(d_sd, x$settings$dvs)
+  est <- x$estimates
+  for (dv in x$settings$dvs) {
+    m <- x$meta[[dv]]
+    kind <- resolve_d_method(d_method, m$type, length(m$baseline) > 0, d_sd[[dv]])
+    idx <- which(est$dv == dv)
+    new <- add_std_diff(est[idx, , drop = FALSE], x$models[[dv]], m$type, x$data[[dv]],
+                        kind, m$baseline, m$contrast_by, d_sd[[dv]])
+    cols <- c("es", "es.low", "es.high", "es_sd", "es_se")
+    est[idx, cols] <- new[, cols]
+    x$meta[[dv]]$d_method <- kind
+  }
+  x$estimates <- est
+  x$settings$d_method <- d_method
+  x
 }
 
 #' How the standardized differences (d) were calculated

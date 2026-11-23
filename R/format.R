@@ -302,20 +302,45 @@ d_note <- function(x, dvs = NULL) {
   if (is.null(es) || all(is.na(es))) return(character())
   d_dvs <- unique(x$estimates$dv[!is.na(es)])
   if (!is.null(dvs)) d_dvs <- intersect(d_dvs, dvs)
-  d_types <- vapply(x$meta[d_dvs], function(m) as.character(m$type)[1], "")
-  out <- character()
-  if (any(d_types %in% c("lm", "lmer"))) {
-    out <- c(out, paste("d = standardized mean difference: the difference divided by the pooled",
-                        "within-group SD of the outcome (linear models) or the total SD of one",
-                        "observation, residual plus random-effect variance (linear mixed models)."))
-  }
-  if (any(d_types %in% c("logit", "glmer", "ordinal", "ordinal_mixed"))) {
-    mixed <- any(d_types %in% c("glmer", "ordinal_mixed"))
-    out <- c(out, paste0(
-      "For logistic and ordinal models, d = ln(OR) divided by the SD of the latent logistic response, ",
-      "\u03c0/\u221a3 (Chinn, 2000)",
-      if (mixed) ", plus the random-effect variance for mixed models, so d is on the total-variance scale" else "",
-      "; it is an approximation, and the odds ratio is the primary effect size."))
-  }
+  if (!length(d_dvs)) return(character())
+  kind <- vapply(x$meta[d_dvs], function(m) {
+    type <- as.character(m$type)[1]
+    method <- m$d_method %||% "adjusted"
+    fam <- if (type %in% c("logit", "glmer", "ordinal", "ordinal_mixed")) "latent" else type
+    paste(fam, method, sep = "_")
+  }, "")
+  latent_mixed <- any(vapply(x$meta[d_dvs], function(m) m$type %in% c("glmer", "ordinal_mixed"), TRUE))
+  only <- length(unique(kind)) == 1
+  pre <- function(what) if (only) "" else paste0("For ", what, ", ")
+  cap <- function(z) paste0(toupper(substring(z, 1, 1)), substring(z, 2))
+  txt <- c(
+    lm_adjusted = paste0(pre("linear models"), "d = the covariate-adjusted difference divided by the pooled ",
+                         "within-group SD of the outcome, ignoring covariates, with Hedges' small-sample correction ",
+                         "(Hedges' g; What Works Clearinghouse, 2022; Olejnik & Algina, 2000)."),
+    lm_baseline = paste0(pre("linear models with a baseline"), "d = the covariate-adjusted difference divided by the pooled ",
+                         "within-group SD of the baseline measure, with Hedges' small-sample correction ",
+                         "(the denominator of d_ppc2; Morris, 2008)."),
+    lm_dppc2 = paste0(pre("linear models with a baseline"), "d = d_ppc2 (Morris, 2008): the difference between the two groups ",
+                      "in mean pre-post change divided by their pooled pre-treatment SD, with Hedges' small-sample ",
+                      "correction, on complete pre/post pairs and without covariate adjustment; CIs use Morris's sampling variance."),
+    lm_partial = paste0(pre("linear models"), "d = the covariate-adjusted difference divided by the residual SD ",
+                        "(a partial d, larger the more variance the covariates explain; Lakens, 2013)."),
+    lm_user = paste0(pre("linear models"), "d = the difference divided by an externally supplied SD."),
+    lmer_adjusted = paste0(pre("linear mixed models"), "d = the difference divided by the total SD of one observation, ",
+                           "residual plus random-effect variance (Westfall, Kenny, & Judd, 2014)."),
+    lmer_partial = paste0(pre("linear mixed models"), "d = the difference divided by the residual SD."),
+    lmer_user = paste0(pre("linear mixed models"), "d = the difference divided by an externally supplied SD."),
+    latent_adjusted = paste0(pre("logistic and ordinal models"), "d = ln(OR) divided by the SD of the latent response: ",
+                             "the logistic variance \u03c0\u00b2/3 (Chinn, 2000) plus the variance of the other fixed effects",
+                             if (latent_mixed) " and the random effects" else "",
+                             " (Nakagawa & Schielzeth, 2013); an approximation, and the odds ratio is the primary effect size."),
+    latent_partial = paste0(pre("logistic and ordinal models"), "d = ln(OR) divided by \u03c0/\u221a3, the SD of the ",
+                            "latent logistic residual (Chinn, 2000), conditional on the covariates",
+                            if (latent_mixed) " and random effects" else "",
+                            "; an approximation, and the odds ratio is the primary effect size.")
+  )
+  order <- names(txt)[names(txt) %in% kind]
+  out <- unname(txt[order])
+  if (!only) out <- cap(out)
   out
 }
