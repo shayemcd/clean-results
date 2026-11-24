@@ -94,7 +94,7 @@ suggestions are welcome as
 
 ## AI assistance
 
-Built with Claude Code.Its numerical output is tested against independent implementations (see
+Built with Claude Code. Its numerical output is tested against independent implementations (see
 [Status](#status)).
 
 ## Citation
