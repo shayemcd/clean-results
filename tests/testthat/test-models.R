@@ -346,3 +346,25 @@ test_that("non-finite numeric outcomes are dropped like missing values", {
   res <- clean_regress(d, dvs = c(score = "linear"), predictors = ~ condition + age)
   expect_equal(res$meta$score$n, nrow(d) - 3L)
 })
+
+test_that("factor levels with no observations get no rows, and an empty reference is replaced", {
+  set.seed(42)
+  d <- data.frame(cond = factor(sample(c("A", "B", "C"), 200, TRUE), levels = c("A", "B", "C", "D")),
+                  y = rnorm(200), z = rbinom(200, 1, 0.5))
+  r <- clean_regress(d, dvs = c(y = "linear", z = "logistic"), predictors = ~ cond, contrasts = "cond")
+  expect_false("D" %in% r$estimates$level)
+  expect_false(any(grepl("D", r$estimates$level[r$estimates$section == "contrast"])))
+  expect_equal(cr_find(r, "y", "cond", "B")$estimate, unname(coef(lm(y ~ cond, d))["condB"]))
+  # an empty reference level: the next level becomes the reference, with a message
+  d2 <- d[d$cond != "A", ]
+  expect_message(r2 <- clean_regress(d2, dvs = c(y = "linear"), predictors = ~ cond), "reference is now 'B'")
+  e <- r2$estimates[r2$estimates$section == "fixed" & !is.na(r2$estimates$level), ]
+  expect_equal(e$level[e$is_ref], "B")
+  expect_false(any(c("A", "D") %in% e$level))
+  expect_equal(cr_find(r2, "y", "cond", "C")$estimate,
+               unname(coef(lm(y ~ cond, droplevels(d2)))["condC"]))
+  # the table has no row for the empty levels
+  labs <- trimws(vapply(cr_table(r2)$grid$rows, `[[`, "", "label"))
+  expect_false(any(labs %in% c("A", "D")))
+  expect_true(all(c("B (ref.)", "C") %in% labs))
+})

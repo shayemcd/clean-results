@@ -314,7 +314,7 @@ cr_plot_interaction <- function(x, dv, x_var, trace, uncertainty = c("ci", "se",
     lab <- make_labeller()
     y_lab <- lab$var(dv)
   }
-  lv <- factor_levels(data[[trace]]) %||% unique(as.character(pl[[trace]]))
+  lv <- present_levels(data[[trace]], pl[[trace]], unique(as.character(pl[[trace]])))
   pl[[trace]] <- factor(as.character(pl[[trace]]), levels = lv)
   pal <- cr_palette(nlevels(pl[[trace]]), palette)
   names(pal) <- levels(pl[[trace]])
@@ -473,7 +473,7 @@ cr_plot_hist <- function(data, var, by = NULL, layout = c("facet", "overlay"), b
                                    linetype = "dashed", linewidth = 0.75)
     }
   } else {
-    d[[by]] <- factor(d[[by]], levels = factor_levels(d[[by]]))
+    d[[by]] <- droplevels(factor(d[[by]], levels = factor_levels(d[[by]])))
     pal <- cr_palette(nlevels(d[[by]]), palette)
     names(pal) <- levels(d[[by]])
     means <- stats::aggregate(d[[var]], list(g = d[[by]]), mean)
@@ -584,11 +584,19 @@ results_labeller <- function(x) {
   )
 }
 
+# The levels of `x` that occur in `present`, in x's order (empty categories
+# are left off plot axes and legends); `fallback` when x is not a factor.
+present_levels <- function(x, present, fallback) {
+  lv <- factor_levels(x)
+  if (is.null(lv)) return(fallback)
+  lv[lv %in% as.character(present)]
+}
+
 raw_means <- function(data, dv, vars, conf_level) {
   check_cols(data, c(dv, vars))
   d <- data[stats::complete.cases(data[, c(dv, vars)]), , drop = FALSE]
   for (v in vars) d[[v]] <- factor(as.character(d[[v]]),
-                                   levels = factor_levels(data[[v]]) %||% sort(unique(d[[v]])))
+                                   levels = present_levels(data[[v]], d[[v]], sort(unique(d[[v]]))))
   key <- interaction(d[vars], drop = TRUE, lex.order = TRUE)
   parts <- split(d, key, drop = TRUE)
   mm <- do.call(rbind, lapply(parts, function(dd) {

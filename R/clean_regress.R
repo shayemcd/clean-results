@@ -263,6 +263,10 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
     # dropped like missing values; lm() would stop on them
     if (is.numeric(data[[dv]])) ok <- ok & is.finite(data[[dv]])
     d_i <- data[ok, , drop = FALSE]
+    # Factor levels with no observations in this model's sample (e.g. a
+    # condition another study had) are dropped, so they get no rows and an
+    # empty reference level cannot silently shift the reference
+    d_i <- drop_empty_levels(d_i, setdiff(vars, all.vars(f[[2]])), dv)
     # Baseline centered in each model's own analysis sample, so the treatment
     # coefficients are effects at the mean baseline (ANCOVA; Lin, 2013 with `lin`)
     if (has_base) d_i$.baseline <- d_i[[base_col]] - mean(d_i[[base_col]])
@@ -342,6 +346,23 @@ clean_regress <- function(data, dvs, predictors = NULL, random = NULL, formulas 
       var_labels = vapply(unique(c(dv_adjust_terms, character())), lab_fun$var, "")
     )
   ), class = "clean_results")
+}
+
+# Drop unused levels of the factor columns `cols`, telling the user when the
+# reference (first) level was among them.
+drop_empty_levels <- function(d, cols, dv) {
+  for (v in cols) {
+    x <- d[[v]]
+    if (!is.factor(x)) next
+    empty <- levels(x)[tabulate(as.integer(x), nlevels(x)) == 0]
+    if (!length(empty)) next
+    d[[v]] <- droplevels(x)
+    if (levels(x)[1] %in% empty) {
+      message(sprintf("No observations of '%s', the reference level of '%s', in the model for '%s'; the reference is now '%s'.",
+                      levels(x)[1], v, dv, levels(d[[v]])[1]))
+    }
+  }
+  d
 }
 
 # d_sd as a named list per outcome (NULL entries for outcomes without one).
