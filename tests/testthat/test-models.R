@@ -101,7 +101,6 @@ test_that("d_method = 'baseline' uses the d_ppc2 scale: adjusted coefficient ove
 })
 
 test_that("d_method = 'dppc2' is Morris's (2008) d_ppc2 on complete pre/post pairs, with his Eq. 25 SE", {
-  skip_if_not_installed("metafor")
   p <- one_per_person(model_data())
   p$trust[1:5] <- NA   # attriters: dropped from both pre and post
   res <- clean_regress(p, dvs = c(trust = "linear"), predictors = ~ condition + age,
@@ -111,7 +110,8 @@ test_that("d_method = 'dppc2' is Morris's (2008) d_ppc2 on complete pre/post pai
   A <- cc[cc$condition == "Gain", ]; B <- cc[cc$condition == "Control", ]
   nA <- nrow(A); nB <- nrow(B); N <- nA + nB
   sd_pre <- sqrt(((nA - 1) * var(A$trust_pre) + (nB - 1) * var(B$trust_pre)) / (N - 2))
-  cp <- metafor:::.cmicalc(N - 2)
+  m <- N - 2
+  cp <- exp(lgamma(m / 2) - log(sqrt(m / 2)) - lgamma((m - 1) / 2))   # exact Hedges c(m)
   d_ref <- cp * ((mean(A$trust) - mean(A$trust_pre)) - (mean(B$trust) - mean(B$trust_pre))) / sd_pre
   r <- cr_find(res, "trust", "condition", "Gain")
   expect_equal(r$es, d_ref)
