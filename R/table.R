@@ -36,8 +36,8 @@
 #' @param note Extra note lines appended under the automatic note.
 #' @param auto_note Include the automatic methods note.
 #' @param effect_size Add a Cohen's *d* column (factor levels and contrasts) for
-#'   linear, logistic, and ordinal models. For logistic and ordinal models it is
-#'   the log odds ratio over the latent logistic SD (see [cr_d()]).
+#'   linear, logistic, and ordinal models, standardized as set by `d_method` in
+#'   [clean_regress()] (see [cr_d()]).
 #' @param omit Regular expression matched against model term labels (the
 #'   `variable` column of [cr_tidy()], e.g. `"Topic"`, `"Month"`,
 #'   `"age:condition"`): matching rows are left out of the table, typically

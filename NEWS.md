@@ -1,6 +1,13 @@
-# cleanresults (development version)
+# cleanresults 0.2.0
 
 ## Bug fixes
+
+* Factor levels with no observations in a model's sample (for example a
+  condition that only another study had) are now dropped before fitting, so
+  they get no table rows, contrasts, or plot categories. Before, they showed as
+  blank rows, and an empty *reference* level silently shifted the labels: each
+  estimate was printed against the wrong level. When the reference level is
+  empty, the next level becomes the reference and a message says so.
 
 * Pairwise contrasts, `cr_plot_means()` brackets and CIs, and
   `cr_plot_interaction()` CIs now use the CR2 Satterthwaite *df* whenever the
@@ -13,6 +20,29 @@
 
 ## New
 
+* `clean_regress()` gains `d_method` to choose how *d* is standardized, with
+  the source of each documented in `?clean_regress` ("Standardized
+  differences (d)"): `"adjusted"` (default), `"baseline"`, `"dppc2"`,
+  `"partial"`, or `"none"`, plus `d_sd` for an external SD. `cr_d()` takes the
+  same arguments to recompute *d* without refitting, and the table note names
+  the method and its reference.
+  * `"adjusted"`: linear *d* is now Hedges' *g*, the covariate-adjusted
+    difference over the pooled within-group SD of the outcome times Hedges'
+    small-sample correction (What Works Clearinghouse, 2022; Olejnik &
+    Algina, 2000). Before, it had no correction, so linear *d* shrinks by a
+    factor of c(N - k): about 3% at N = 30, under 0.3% at N = 300.
+    Logistic and ordinal *d* now also adds the variance of the other fixed
+    effects' linear predictor to the latent variance, so covariates no longer
+    make *d* larger (Nakagawa & Schielzeth, 2013); with no covariates it is
+    unchanged.
+  * `"baseline"`: for linear models with a `baseline`, the adjusted
+    difference over the Hedges-corrected pooled pre-treatment SD (the
+    denominator of `d_ppc2`, Morris, 2008).
+  * `"dppc2"`: Morris's (2008) `d_ppc2` itself, the difference in mean
+    pre-post change over the pooled pre-treatment SD, on complete pre/post
+    pairs, with CIs from his sampling variance.
+  * `"partial"`: over the residual SD (for logistic and ordinal, over
+    \eqn{\pi/\sqrt{3}} alone, Chinn, 2000).
 * `clean_regress()` gains `vcov_type` to choose the heteroskedasticity-consistent
   estimator (`"HC3"` by default, or `"HC1"`, `"HC0"`, `"HC2"`, `"HC4"`) for
   unclustered robust SEs; the table note names the estimator used. Clustered and

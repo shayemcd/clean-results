@@ -11,6 +11,7 @@ Fits linear, logistic, count, ordinal, mixed-effects, and Bayesian regressions f
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://shayemcd.github.io/clean-results/}
   \item \url{https://github.com/shayemcd/clean-results}
   \item Report bugs at \url{https://github.com/shayemcd/clean-results/issues}
 }

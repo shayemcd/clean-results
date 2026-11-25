@@ -11,7 +11,8 @@ cr_d(x, ...)
 
 \item{...}{For data frames, arguments to \code{\link[=cr_ttest]{cr_ttest()}}. For results, \code{dv}
 and \code{variable} to filter, and \code{pairs} (\code{"all"} contrasts, \code{"ref"}
-levels versus the reference, or \code{"A vs. B"} strings).}
+levels versus the reference, or \code{"A vs. B"} strings), plus \code{d_method}
+and \code{d_sd} as in \code{\link[=clean_regress]{clean_regress()}} to recompute \emph{d} with another method.}
 }
 \value{
 A \code{cr_tests} object (data) or a data frame (results), which carries
@@ -20,11 +21,15 @@ how \emph{d} was calculated as \code{attr(, "note")} (see \code{\link[=cr_d_note
 \description{
 For a data frame, the same as \code{\link[=cr_ttest]{cr_ttest()}}. For \code{\link[=clean_regress]{clean_regress()}} results,
 returns the model-based standardized differences: each factor level versus
-the reference and every pairwise contrast, divided by the pooled
-within-group SD of the outcome (\code{lm}) or the total SD (\code{lmer}), with CIs
-from the same robust SEs. For logistic and ordinal (cumulative logit)
-models, \emph{d} is the log odds ratio divided by the SD of the latent logistic
-response, \eqn{\pi/\sqrt{3}} (Chinn, 2000); in mixed models the
-random-effect variance is added to that variance, giving the latent
-total-variance scale (Snijders & Bosker, 2012; Nakagawa & Schielzeth, 2013).
+the reference and every pairwise contrast, with CIs from the same robust
+SEs. How \emph{d} is standardized is set by \code{d_method} in \code{\link[=clean_regress]{clean_regress()}}
+(see its section "Standardized differences (d)" for each method and its
+source); pass \code{d_method} here to recompute under another one without
+refitting. By default, linear-model \emph{d} is Hedges' \emph{g}: the
+covariate-adjusted difference over the pooled within-group SD of the
+outcome, with Hedges' small-sample correction (What Works Clearinghouse,
+2022; Olejnik & Algina, 2000); linear mixed models use the total SD
+(Westfall, Kenny, & Judd, 2014); logistic and ordinal models divide the log
+odds ratio by the SD of the latent response (Chinn, 2000; Nakagawa &
+Schielzeth, 2013).
 }

@@ -29,6 +29,8 @@ clean_regress(
   baseline = NULL,
   lin = NULL,
   contrast_by = NULL,
+  d_method = c("adjusted", "baseline", "dppc2", "partial", "none"),
+  d_sd = NULL,
   fit_args = list()
 )
 }
@@ -107,7 +109,8 @@ factor (\code{list(condition = c(GainFraming = "Gain frame"))}).}
 
 \item{baseline}{Pre-treatment measure of each outcome, added as a covariate
 centered on the analysis sample (ANCOVA): a named vector
-\code{c(trust = "trust_pre")}, or one column for every outcome.}
+\code{c(trust = "trust_pre")}, or one column for every outcome. See \code{d_method}
+for the two \emph{d}'s that use it.}
 
 \item{lin}{Treatment variable(s) to interact with the centered baseline (the
 Lin, 2013 estimator); treatment rows then estimate the effect at the mean
@@ -115,6 +118,34 @@ baseline.}
 
 \item{contrast_by}{A moderator: pairwise contrasts are computed within each
 of its levels (simple effects), adjusted within each level.}
+
+\item{d_method}{How the standardized difference \emph{d} is calculated (the
+\code{es} columns, the \emph{d} column of \code{\link[=cr_table]{cr_table()}}, and \code{\link[=cr_d]{cr_d()}}). Each option
+and its source is described under "Standardized differences (d)" below.
+\describe{
+\item{\code{"adjusted"} (default)}{Covariate-adjusted difference over the
+SD of the outcome ignoring covariates, with Hedges' correction
+(What Works Clearinghouse, 2022; Olejnik & Algina, 2000; Hedges,
+1981). Mixed models: total SD (Westfall, Kenny, & Judd, 2014).
+Logistic and ordinal: latent total SD (Chinn, 2000; Nakagawa &
+Schielzeth, 2013).}
+\item{\code{"baseline"}}{Linear models with a \code{baseline}: adjusted
+difference over the pooled pre-treatment SD, with Hedges' correction
+(the denominator of d_ppc2; Morris, 2008).}
+\item{\code{"dppc2"}}{Linear models with a \code{baseline}: Morris's (2008)
+d_ppc2 itself, the difference in mean pre-post change over the pooled
+pre-treatment SD, without covariate adjustment.}
+\item{\code{"partial"}}{Adjusted difference over the residual SD (Lakens,
+2013); logistic and ordinal: over \eqn{\pi/\sqrt{3}}{pi/sqrt(3)} alone
+(Chinn, 2000).}
+\item{\code{"none"}}{No \emph{d}.}
+}
+\code{"baseline"} and \code{"dppc2"} fall back to \code{"adjusted"} for outcomes
+without a baseline and for non-linear or mixed models.}
+
+\item{d_sd}{Optional SD to standardize by instead, for linear and linear
+mixed models (e.g. a population or norm-sample SD): one number for all
+outcomes or a named vector per outcome. Not corrected for small samples.}
 
 \item{fit_args}{List of extra arguments passed to every model fitter, e.g.
 \code{list(control = lme4::glmerControl(optimizer = "bobyqa"))}.}
@@ -131,6 +162,56 @@ multiple-comparison corrections within factors and/or across outcomes.
 Render the result with \code{\link[=cr_table]{cr_table()}} (or just print it in a Quarto chunk),
 save it with \code{\link[=cr_save]{cr_save()}}, and cite numbers in text with \code{\link[=cr_inline]{cr_inline()}}.
 }
+\section{Standardized differences (d)}{
+
+\emph{d} is reported for factor levels and pairwise contrasts in linear, linear
+mixed, logistic, and ordinal (cumulative logit) models. Its CI is the
+estimate's CI on the same scale (so it uses the same robust SEs and
+adjustments), except for \code{"dppc2"}, which has its own SE.
+\describe{
+\item{\code{"adjusted"}, linear models}{\eqn{g = c(N - k)\, b / SD_p}{g = c(N - k) b / SD_p}, where
+\emph{b} is the model's covariate-adjusted difference, \eqn{SD_p} the
+pooled within-group SD of the raw outcome across the factor's \emph{k}
+levels, and \emph{c} Hedges' (1981) small-sample correction. This is the
+What Works Clearinghouse (2022, Appendix E) Hedges' \emph{g} for adjusted
+designs, and the "standardizer ignoring the covariates" of Olejnik and
+Algina (2000): covariates sharpen the numerator but do not shrink the
+SD, so \emph{d} stays comparable to \emph{d} from designs without them
+(Lakens, 2013). The recommended default.}
+\item{\code{"adjusted"}, linear mixed models}{\emph{b} over the total SD of one
+observation, \eqn{\sqrt{\sigma^2_e + \sigma^2_{random}}}{sqrt(residual variance + random-effect variance)}, the
+random-effect variance averaged over rows so random slopes count
+(Westfall, Kenny, & Judd, 2014; the \eqn{\delta_T}{delta_T} of Hedges, 2007).}
+\item{\code{"adjusted"}, logistic and ordinal models}{ln(OR) over the
+SD of the latent response: the logistic variance \eqn{\pi^2/3}{pi^2/3}
+(Chinn, 2000) plus the variance of the other fixed effects' linear
+predictor (pooled within the factor's levels) and, in mixed models, the
+random-effect variance (Nakagawa & Schielzeth, 2013). The latent
+analogue of the linear \emph{d}'s SD ignoring covariates. An approximation:
+the odds ratio is the primary effect size.}
+\item{\code{"baseline"}}{Linear models with a \code{baseline}: \emph{b} over the pooled
+within-group SD of the pre-treatment measure, times Hedges' correction:
+the denominator of \eqn{d_{ppc2}}{d_ppc2} (Morris, 2008), and the What Works
+Clearinghouse's fallback when no posttest SD is available. Useful when
+the treatment changes the outcome's spread.}
+\item{\code{"dppc2"}}{Linear models with a \code{baseline}: Morris's (2008)
+\eqn{d_{ppc2} = c(n_A + n_B - 2)[(\bar{y}_A - \bar{x}_A) - (\bar{y}_B -
+    \bar{x}_B)] / SD_{pre}}{d_ppc2 = c(nA + nB - 2) [(post_A - pre_A) - (post_B - pre_B)] / SD_pre},
+with group means of the post (y) and pre (x) scores, from the model's analysis sample (complete
+pre/post pairs) of the two groups compared, with CIs from his Eq. 25
+sampling variance. It ignores the model's other covariates and uses the
+change score, not the ANCOVA estimate, so it can differ from \emph{b} when
+groups differ at baseline. Use it to match meta-analyses that report it.}
+\item{\code{"partial"}}{\emph{b} over the model's residual SD: grows as covariates
+explain variance, so it is not comparable across designs (Lakens, 2013;
+Olejnik & Algina, 2000). For logistic and ordinal models,
+\eqn{\ln(OR) / (\pi/\sqrt{3})}{ln(OR) / (pi/sqrt(3))}, conditional on covariates and random
+effects (Chinn, 2000).}
+}
+The table note (\code{\link[=cr_d_note]{cr_d_note()}}) states which was used, and \code{\link[=cr_d]{cr_d()}}
+recomputes \emph{d} under another method without refitting.
+}
+
 \examples{
 \dontrun{
 res <- clean_regress(
@@ -144,4 +225,43 @@ res <- clean_regress(
 res
 cr_save(res, "tables/table2.docx")
 }
+}
+\references{
+Chinn, S. (2000). A simple method for converting an odds ratio to effect
+size for use in meta-analysis. \emph{Statistics in Medicine, 19}(22), 3127-3131.
+
+Hedges, L. V. (1981). Distribution theory for Glass's estimator of effect
+size and related estimators. \emph{Journal of Educational Statistics, 6}(2),
+107-128.
+
+Hedges, L. V. (2007). Effect sizes in cluster-randomized designs. \emph{Journal
+of Educational and Behavioral Statistics, 32}(4), 341-370.
+
+Lakens, D. (2013). Calculating and reporting effect sizes to facilitate
+cumulative science: A practical primer for t-tests and ANOVAs. \emph{Frontiers
+in Psychology, 4}, 863.
+
+Lin, W. (2013). Agnostic notes on regression adjustments to experimental
+data: Reexamining Freedman's critique. \emph{Annals of Applied Statistics, 7}(1),
+295-318.
+
+Morris, S. B. (2008). Estimating effect sizes from pretest-posttest-control
+group designs. \emph{Organizational Research Methods, 11}(2), 364-386.
+
+Nakagawa, S., & Schielzeth, H. (2013). A general and simple method for
+obtaining R2 from generalized linear mixed-effects models. \emph{Methods in
+Ecology and Evolution, 4}(2), 133-142.
+
+Olejnik, S., & Algina, J. (2000). Measures of effect size for comparative
+studies: Applications, interpretations, and limitations. \emph{Contemporary
+Educational Psychology, 25}(3), 241-286.
+
+Westfall, J., Kenny, D. A., & Judd, C. M. (2014). Statistical power and
+optimal design in experiments in which samples of participants respond to
+samples of stimuli. \emph{Journal of Experimental Psychology: General, 143}(5),
+2020-2045.
+
+What Works Clearinghouse. (2022). \emph{What Works Clearinghouse procedures and
+standards handbook, version 5.0}. U.S. Department of Education, Institute of
+Education Sciences. Appendix E.
 }

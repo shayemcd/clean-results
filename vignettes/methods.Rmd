@@ -58,18 +58,29 @@ these applied to that table.
 - When `adjust` is on, CIs (including *d*'s) are Bonferroni-adjusted to match
   the corrected *p*-values, so a CI that excludes zero always comes with a
   significant adjusted *p*.
-- Model-based *d* (`cr_d(res)`, `cr_table(res, effect_size = TRUE)`) divides
-  by the pooled within-group SD of the outcome for linear models, so
-  covariates don't inflate it. For mixed models it divides by the total SD of
-  one observation: the residual variance plus the variance the random effects
-  add, random slopes included. For logistic and ordinal (cumulative logit)
-  models *d* is the log odds ratio divided by the SD of the latent logistic
-  response, $\pi/\sqrt{3} \approx 1.81$ (Chinn, 2000); mixed models add the
-  random-effect variance to that variance, so *d* is on the latent
-  total-variance scale and is smaller than the conditional OR alone implies
-  (Snijders & Bosker, 2012; Nakagawa & Schielzeth, 2013). It is a
-  conversion for comparing effects across outcomes: report the odds ratio as
-  the effect size and treat *d* as approximate.
+- Model-based *d* (`cr_d(res)`, `cr_table(res, effect_size = TRUE)`) is set
+  by `d_method` in `clean_regress()`; `?clean_regress` gives the formula and
+  source for each. The default, `"adjusted"`, is Hedges' *g* as the What Works
+  Clearinghouse (2022) computes it for covariate-adjusted designs: the
+  model's adjusted difference over the pooled within-group SD of the outcome,
+  ignoring covariates (Olejnik & Algina, 2000), times Hedges' small-sample
+  correction. Covariates sharpen the numerator without shrinking the SD, so
+  *d* is comparable to *d* from designs without them. For mixed models it
+  divides by the total SD of one observation: the residual variance plus the
+  variance the random effects add, random slopes included (Westfall, Kenny, &
+  Judd, 2014). For logistic and ordinal (cumulative logit) models *d* is the
+  log odds ratio over the SD of the latent response: the logistic variance
+  $\pi^2/3$ (Chinn, 2000), plus the variance of the other fixed effects'
+  linear predictor and, in mixed models, the random-effect variance
+  (Nakagawa & Schielzeth, 2013). It is a conversion for comparing effects
+  across outcomes: report the odds ratio as the effect size and treat *d* as
+  approximate.
+- The alternatives: `"baseline"` (pre-post designs: the adjusted difference
+  over the pooled pre-treatment SD, the denominator of Morris's 2008
+  `d_ppc2`), `"dppc2"` (Morris's change-score `d_ppc2` itself, without
+  covariate adjustment), `"partial"` (over the residual SD; larger the more
+  the covariates explain, so not comparable across designs), `"none"`, and
+  `d_sd` for an external SD.
 
 ## What the checks can and can't do
 
