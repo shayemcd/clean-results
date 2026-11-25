@@ -33,6 +33,8 @@ and in Google Docs.
 ```r
 # install.packages("remotes")
 remotes::install_github("shayemcd/clean-results")
+# or a fixed release, so results don't change under you:
+# remotes::install_github("shayemcd/clean-results@v0.2.0")
 
 # optional, depending on the models you fit
 install.packages(c("lme4", "lmerTest"))       # mixed models
@@ -86,7 +88,7 @@ The same guides are in the package as vignettes
 
 ## Status
 
-Version 0.1.0. The tables, text, and figures are tested against `emmeans`,
+Version 0.2.0. The tables, text, and figures are tested against `emmeans`,
 `effectsize`, `sandwich`, and the underlying model packages (see
 `tests/testthat/`), but the API may still change before 1.0. Bug reports and
 suggestions are welcome as

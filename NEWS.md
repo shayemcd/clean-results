@@ -1,6 +1,13 @@
-# cleanresults (development version)
+# cleanresults 0.2.0
 
 ## Bug fixes
+
+* Factor levels with no observations in a model's sample (for example a
+  condition that only another study had) are now dropped before fitting, so
+  they get no table rows, contrasts, or plot categories. Before, they showed as
+  blank rows, and an empty *reference* level silently shifted the labels: each
+  estimate was printed against the wrong level. When the reference level is
+  empty, the next level becomes the reference and a message says so.
 
 * Pairwise contrasts, `cr_plot_means()` brackets and CIs, and
   `cr_plot_interaction()` CIs now use the CR2 Satterthwaite *df* whenever the

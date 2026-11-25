@@ -55,8 +55,8 @@ below the estimate), or \code{"inline"} (one cell: \code{0.46 (0.21)} or
 \item{auto_note}{Include the automatic methods note.}
 
 \item{effect_size}{Add a Cohen's \emph{d} column (factor levels and contrasts) for
-linear, logistic, and ordinal models. For logistic and ordinal models it is
-the log odds ratio over the latent logistic SD (see \code{\link[=cr_d]{cr_d()}}).}
+linear, logistic, and ordinal models, standardized as set by \code{d_method} in
+\code{\link[=clean_regress]{clean_regress()}} (see \code{\link[=cr_d]{cr_d()}}).}
 
 \item{omit}{Regular expression matched against model term labels (the
 \code{variable} column of \code{\link[=cr_tidy]{cr_tidy()}}, e.g. \code{"Topic"}, \code{"Month"},

@@ -8,8 +8,8 @@ abstract: >-
   objects, with robust standard errors, explicit reference categories,
   multiple-comparison corrections, and checks that manuscript numbers match
   the results.
-version: 0.1.0
-date-released: "2026-10-13"
+version: 0.2.0
+date-released: "2026-11-25"
 license: MIT
 repository-code: "https://github.com/shayemcd/clean-results"
 url: "https://github.com/shayemcd/clean-results"
